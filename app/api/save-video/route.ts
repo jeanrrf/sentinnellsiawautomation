@@ -1,46 +1,54 @@
 import { NextResponse } from "next/server"
-import redis from "@/lib/redis"
+import { saveVideo } from "@/lib/redis"
 
 export async function POST(req: Request) {
   try {
-    const { productId, duration } = await req.json()
+    const data = await req.json()
+    const { productId, duration } = data
 
     if (!productId) {
-      return NextResponse.json({ success: false, message: "Product ID is required" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "ID do produto é obrigatório" }, { status: 400 })
     }
 
-    // Generate a unique ID for the video
-    const videoId = `video_${Date.now()}_${productId}`
+    // Buscar informações do produto
+    const productResponse = await fetch(new URL("/api/products", req.url).toString())
+    if (!productResponse.ok) {
+      throw new Error(`Falha ao buscar produtos: ${productResponse.status}`)
+    }
 
-    // In a real implementation, this would capture and save the actual video
-    // For now, we'll just save metadata to Redis
+    const productsData = await productResponse.json()
+    const product = productsData.products.find((p: any) => p.itemId === productId)
+
+    if (!product) {
+      return NextResponse.json({ success: false, message: "Produto não encontrado" }, { status: 404 })
+    }
+
+    // Criar dados do vídeo
     const videoData = {
-      id: videoId,
       productId,
+      productName: product.productName,
+      imageUrl: product.imageUrl,
+      price: product.price,
       duration: duration || 5,
       createdAt: new Date().toISOString(),
-      status: "pending",
+      status: "pending", // pending, published, failed
+      videoUrl: `/api/preview/${productId}?t=${Date.now()}`, // URL para visualização do vídeo
     }
 
-    // Save to Redis
-    await redis.set(`shopee:video:${videoId}`, JSON.stringify(videoData), {
-      ex: 60 * 60 * 24 * 7, // 7 days expiration
-    })
-
-    // Add to videos list
-    await redis.sadd("shopee:videos", videoId)
+    // Salvar vídeo no Redis
+    await saveVideo(videoData)
 
     return NextResponse.json({
       success: true,
-      message: "Video saved successfully",
-      videoId,
+      message: "Vídeo salvo com sucesso",
+      video: videoData,
     })
   } catch (error: any) {
-    console.error("Error saving video:", error)
+    console.error("Erro ao salvar vídeo:", error)
     return NextResponse.json(
       {
         success: false,
-        message: `Failed to save video: ${error.message}`,
+        message: `Falha ao salvar vídeo: ${error.message}`,
       },
       { status: 500 },
     )

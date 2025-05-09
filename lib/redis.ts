@@ -6,8 +6,8 @@ let redis: Redis
 try {
   // Use REST client which is more reliable for serverless environments
   redis = new Redis({
-    url: process.env.UPSTASH_REDIS_REST_URL || "https://moral-slug-22722.upstash.io",
-    token: process.env.UPSTASH_REDIS_REST_TOKEN || "AVjCAAIjcDEzYWMzZmZkMGY1OWE0NDVmODFjNmM1NTRmYWFhYWVlOXAxMA",
+    url: process.env.KV_REST_API_URL || "https://moral-slug-22722.upstash.io",
+    token: process.env.KV_REST_API_TOKEN || "AVjCAAIjcDEzYWMzZmZkMGY1OWE0NDVmODFjNmM1NTRmYWFhYWVlOXAxMA",
   })
 
   console.log("Redis client initialized successfully")
@@ -32,6 +32,8 @@ export const CACHE_TTL = {
   PRODUCTS: 60 * 60, // 1 hour
   DESCRIPTIONS: 60 * 60 * 24, // 24 hours
   PROCESSED_IDS: 60 * 60 * 24 * 7, // 7 days
+  PUBLISHED_VIDEOS: 60 * 60 * 24 * 30, // 30 days
+  EXCLUDED_PRODUCTS: 60 * 60 * 24 * 90, // 90 days (produtos que não devem ser buscados novamente)
 }
 
 // Cache keys
@@ -40,25 +42,35 @@ export const CACHE_KEYS = {
   DESCRIPTION_PREFIX: "shopee:description:",
   PROCESSED_IDS: "shopee:processed_ids",
   PRODUCT_PREFIX: "shopee:product:",
+  VIDEOS: "shopee:videos",
+  VIDEO_PREFIX: "shopee:video:",
+  PUBLISHED_VIDEOS: "shopee:published_videos",
+  EXCLUDED_PRODUCTS: "shopee:excluded_products", // Produtos que não devem ser buscados novamente
 }
 
 // Cache utility functions with error handling
 export async function cacheProducts(products: any[]): Promise<void> {
   try {
+    // Verificar produtos excluídos antes de cachear
+    const excludedProducts = await getExcludedProducts()
+
+    // Filtrar produtos que não estão na lista de excluídos
+    const filteredProducts = products.filter((product) => !excludedProducts.includes(product.itemId))
+
     // Make sure we're storing a string in Redis
-    const productsString = JSON.stringify(products)
+    const productsString = JSON.stringify(filteredProducts)
 
     // Cache the full product list
     await redis.set(CACHE_KEYS.PRODUCTS, productsString, { ex: CACHE_TTL.PRODUCTS })
 
     // Also cache individual products for faster access
-    for (const product of products) {
+    for (const product of filteredProducts) {
       await redis.set(`${CACHE_KEYS.PRODUCT_PREFIX}${product.itemId}`, JSON.stringify(product), {
         ex: CACHE_TTL.PRODUCTS,
       })
     }
 
-    console.log(`Cached ${products.length} products for ${CACHE_TTL.PRODUCTS} seconds`)
+    console.log(`Cached ${filteredProducts.length} products for ${CACHE_TTL.PRODUCTS} seconds`)
   } catch (error) {
     console.error("Error caching products:", error)
     // Continue execution even if caching fails
@@ -165,6 +177,188 @@ export async function isIdProcessed(productId: string): Promise<boolean> {
   } catch (error) {
     console.error(`Error checking if ID ${productId} is processed:`, error)
     return false
+  }
+}
+
+/**
+ * Adiciona um produto à lista de excluídos
+ * Produtos excluídos não serão mais buscados na API ou exibidos nas listas
+ */
+export async function addExcludedProduct(productId: string): Promise<void> {
+  try {
+    await redis.sadd(CACHE_KEYS.EXCLUDED_PRODUCTS, productId)
+
+    // Definir TTL se o conjunto for recém-criado
+    const ttl = await redis.ttl(CACHE_KEYS.EXCLUDED_PRODUCTS)
+    if (ttl < 0) {
+      await redis.expire(CACHE_KEYS.EXCLUDED_PRODUCTS, CACHE_TTL.EXCLUDED_PRODUCTS)
+    }
+
+    // Remover o produto do cache de produtos
+    await redis.del(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
+
+    // Remover o produto da lista de produtos
+    const products = await getCachedProducts()
+    if (products) {
+      const updatedProducts = products.filter((p) => p.itemId !== productId)
+      await redis.set(CACHE_KEYS.PRODUCTS, JSON.stringify(updatedProducts), { ex: CACHE_TTL.PRODUCTS })
+    }
+
+    console.log(`Produto ${productId} adicionado à lista de excluídos`)
+  } catch (error) {
+    console.error(`Erro ao adicionar produto ${productId} à lista de excluídos:`, error)
+  }
+}
+
+/**
+ * Verifica se um produto está na lista de excluídos
+ */
+export async function isProductExcluded(productId: string): Promise<boolean> {
+  try {
+    return (await redis.sismember(CACHE_KEYS.EXCLUDED_PRODUCTS, productId)) === 1
+  } catch (error) {
+    console.error(`Erro ao verificar se o produto ${productId} está excluído:`, error)
+    return false
+  }
+}
+
+/**
+ * Obtém a lista de produtos excluídos
+ */
+export async function getExcludedProducts(): Promise<string[]> {
+  try {
+    return await redis.smembers(CACHE_KEYS.EXCLUDED_PRODUCTS)
+  } catch (error) {
+    console.error("Erro ao obter produtos excluídos:", error)
+    return []
+  }
+}
+
+/**
+ * Salva um vídeo gerado no Redis
+ */
+export async function saveVideo(videoData: any): Promise<void> {
+  try {
+    const { productId } = videoData
+
+    if (!productId) {
+      throw new Error("ID do produto é obrigatório para salvar o vídeo")
+    }
+
+    // Adicionar ID do vídeo ao conjunto de vídeos
+    await redis.sadd(CACHE_KEYS.VIDEOS, productId)
+
+    // Salvar dados do vídeo
+    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`, JSON.stringify(videoData), {
+      ex: CACHE_TTL.PROCESSED_IDS,
+    })
+
+    // Adicionar o produto à lista de excluídos
+    await addExcludedProduct(productId)
+
+    console.log(`Vídeo para o produto ${productId} salvo com sucesso`)
+  } catch (error) {
+    console.error("Erro ao salvar vídeo:", error)
+    throw error
+  }
+}
+
+/**
+ * Obtém todos os vídeos gerados
+ */
+export async function getVideos(): Promise<any[]> {
+  try {
+    const videoIds = await redis.smembers(CACHE_KEYS.VIDEOS)
+
+    if (!videoIds || videoIds.length === 0) {
+      return []
+    }
+
+    const videos = []
+    for (const videoId of videoIds) {
+      const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+      if (videoData) {
+        try {
+          videos.push(JSON.parse(videoData))
+        } catch (e) {
+          console.error(`Erro ao analisar dados do vídeo ${videoId}:`, e)
+        }
+      }
+    }
+
+    return videos
+  } catch (error) {
+    console.error("Erro ao obter vídeos:", error)
+    return []
+  }
+}
+
+/**
+ * Publica um vídeo (move da lista de vídeos para a lista de publicados)
+ */
+export async function publishVideo(productId: string): Promise<void> {
+  try {
+    // Verificar se o vídeo existe
+    const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`)
+    if (!videoData) {
+      throw new Error(`Vídeo para o produto ${productId} não encontrado`)
+    }
+
+    // Adicionar à lista de vídeos publicados
+    await redis.sadd(CACHE_KEYS.PUBLISHED_VIDEOS, productId)
+
+    // Definir TTL se o conjunto for recém-criado
+    const ttl = await redis.ttl(CACHE_KEYS.PUBLISHED_VIDEOS)
+    if (ttl < 0) {
+      await redis.expire(CACHE_KEYS.PUBLISHED_VIDEOS, CACHE_TTL.PUBLISHED_VIDEOS)
+    }
+
+    // Remover da lista de vídeos não publicados
+    await redis.srem(CACHE_KEYS.VIDEOS, productId)
+
+    // Atualizar os dados do vídeo com a data de publicação
+    const videoObj = JSON.parse(videoData)
+    videoObj.publishedAt = new Date().toISOString()
+
+    // Salvar os dados atualizados
+    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`, JSON.stringify(videoObj), {
+      ex: CACHE_TTL.PUBLISHED_VIDEOS,
+    })
+
+    console.log(`Vídeo para o produto ${productId} publicado com sucesso`)
+  } catch (error) {
+    console.error(`Erro ao publicar vídeo ${productId}:`, error)
+    throw error
+  }
+}
+
+/**
+ * Obtém todos os vídeos publicados
+ */
+export async function getPublishedVideos(): Promise<any[]> {
+  try {
+    const videoIds = await redis.smembers(CACHE_KEYS.PUBLISHED_VIDEOS)
+
+    if (!videoIds || videoIds.length === 0) {
+      return []
+    }
+
+    const videos = []
+    for (const videoId of videoIds) {
+      const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+      if (videoData) {
+        try {
+          videos.push(JSON.parse(videoData))
+        } catch (e) {
+          console.error(`Erro ao analisar dados do vídeo publicado ${videoId}:`, e)
+        }
+      }
+    }
+
+    return videos
+  } catch (error) {
+    console.error("Erro ao obter vídeos publicados:", error)
+    return []
   }
 }
 
