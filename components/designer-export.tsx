@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Video, AlertCircle } from "lucide-react"
+import { Loader2, Video, AlertCircle, ExternalLink, Copy } from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -32,6 +32,7 @@ export function DesignerExport() {
   const [previewUrl, setPreviewUrl] = useState("")
   const [videoUrl, setVideoUrl] = useState("")
   const [videoGenerated, setVideoGenerated] = useState(false)
+  const [videoData, setVideoData] = useState<any>(null)
 
   // Estados para configuração do card
   const [useAI, setUseAI] = useState(true)
@@ -47,7 +48,7 @@ export function DesignerExport() {
   // Referências para manipulação do DOM
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const videoContainerRef = useRef<HTMLDivElement>(null)
 
   // Hook de toast para notificações
   const { toast } = useToast()
@@ -83,6 +84,9 @@ export function DesignerExport() {
     return () => {
       if (previewContainerRef.current) {
         previewContainerRef.current.innerHTML = ""
+      }
+      if (videoContainerRef.current) {
+        videoContainerRef.current.innerHTML = ""
       }
     }
   }, [])
@@ -126,6 +130,42 @@ export function DesignerExport() {
     }
   }, [htmlTemplate])
 
+  // Renderizar o vídeo quando gerado
+  useEffect(() => {
+    if (videoGenerated && htmlTemplate && videoContainerRef.current) {
+      try {
+        // Limpar o conteúdo anterior
+        videoContainerRef.current.innerHTML = ""
+
+        // Criar um iframe isolado para o vídeo
+        const iframe = document.createElement("iframe")
+        iframe.style.width = "100%"
+        iframe.style.height = "100%"
+        iframe.style.border = "none"
+        iframe.style.overflow = "hidden"
+        iframe.title = "Video Preview"
+        iframe.sandbox.add("allow-same-origin")
+
+        // Adicionar ao container
+        videoContainerRef.current.appendChild(iframe)
+
+        // Escrever o conteúdo no iframe após ele ser carregado
+        iframe.onload = () => {
+          if (iframe.contentDocument) {
+            iframe.contentDocument.open()
+            iframe.contentDocument.write(htmlTemplate)
+            iframe.contentDocument.close()
+          }
+        }
+
+        // Iniciar o carregamento
+        iframe.src = "about:blank"
+      } catch (error) {
+        console.error("Erro ao renderizar vídeo:", error)
+      }
+    }
+  }, [videoGenerated, htmlTemplate, activeTab])
+
   /**
    * Simula o progresso da geração do card
    */
@@ -168,6 +208,12 @@ export function DesignerExport() {
 
       setGenerationStep("Buscando informações do produto...")
 
+      // Verificar se o produto existe na lista
+      const productExists = products.some((p) => p.itemId === selectedProduct)
+      if (!productExists) {
+        throw new Error(`Produto com ID ${selectedProduct} não encontrado na lista de produtos.`)
+      }
+
       // Fazer a requisição para a API de geração de vídeo
       const response = await fetch("/api/generate-video", {
         method: "POST",
@@ -193,7 +239,8 @@ export function DesignerExport() {
       }
 
       setHtmlTemplate(data.htmlTemplate)
-      setPreviewUrl(`/api/preview/${selectedProduct}?style=${videoStyle}&t=${Date.now()}`)
+      const timestamp = Date.now()
+      setPreviewUrl(`/api/preview/${selectedProduct}?style=${videoStyle}&t=${timestamp}`)
 
       setGenerationProgress(100)
 
@@ -227,7 +274,7 @@ export function DesignerExport() {
    * Manipula a gravação do vídeo
    */
   const handleRecordVideo = async () => {
-    if (!previewUrl) {
+    if (!previewUrl || !htmlTemplate) {
       toast({
         variant: "destructive",
         title: "Erro ao gravar vídeo",
@@ -251,6 +298,12 @@ export function DesignerExport() {
       // Simular tempo de gravação
       await new Promise((resolve) => setTimeout(resolve, recordingDuration * 1000))
 
+      // Verificar se o produto existe na lista
+      const productExists = products.some((p) => p.itemId === selectedProduct)
+      if (!productExists) {
+        throw new Error(`Produto com ID ${selectedProduct} não encontrado na lista de produtos.`)
+      }
+
       // Simular salvamento no Redis
       const response = await fetch("/api/save-video", {
         method: "POST",
@@ -260,6 +313,7 @@ export function DesignerExport() {
         body: JSON.stringify({
           productId: selectedProduct,
           duration: recordingDuration,
+          htmlTemplate: htmlTemplate, // Passar o HTML template diretamente
         }),
       })
 
@@ -272,6 +326,7 @@ export function DesignerExport() {
       if (data.success && data.video) {
         // Definir a URL do vídeo para exibição
         setVideoUrl(data.video.videoUrl)
+        setVideoData(data.video)
         setVideoGenerated(true)
 
         // Mudar para a aba de vídeo para mostrar o resultado
@@ -294,6 +349,73 @@ export function DesignerExport() {
     } finally {
       setIsRecording(false)
     }
+  }
+
+  // Função para abrir o preview em uma nova janela
+  const openPreviewInNewWindow = () => {
+    if (!previewUrl) return
+
+    // Criar uma nova janela com o tamanho adequado para o estilo selecionado
+    let width = 1080
+    let height = 1920
+
+    if (videoStyle === "square") {
+      width = 1080
+      height = 1080
+    } else if (videoStyle === "landscape") {
+      width = 1920
+      height = 1080
+    }
+
+    // Ajustar para caber na tela
+    const screenWidth = window.screen.width
+    const screenHeight = window.screen.height
+
+    if (width > screenWidth * 0.9) {
+      const ratio = width / height
+      width = Math.floor(screenWidth * 0.9)
+      height = Math.floor(width / ratio)
+    }
+
+    if (height > screenHeight * 0.9) {
+      const ratio = width / height
+      height = Math.floor(screenHeight * 0.9)
+      width = Math.floor(height * ratio)
+    }
+
+    const left = Math.floor((screenWidth - width) / 2)
+    const top = Math.floor((screenHeight - height) / 2)
+
+    window.open(
+      previewUrl,
+      "preview",
+      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`,
+    )
+  }
+
+  // Função para copiar o link do preview
+  const copyPreviewLink = () => {
+    if (!previewUrl) return
+
+    navigator.clipboard
+      .writeText(window.location.origin + previewUrl)
+      .then(() => {
+        toast({
+          title: "Link copiado",
+          description: "O link do preview foi copiado para a área de transferência",
+          className:
+            "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
+        })
+      })
+      .catch((err) => {
+        console.error("Erro ao copiar link:", err)
+        toast({
+          variant: "destructive",
+          title: "Erro ao copiar link",
+          description: "Não foi possível copiar o link para a área de transferência",
+          className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
+        })
+      })
   }
 
   return (
@@ -488,6 +610,20 @@ export function DesignerExport() {
                         </div>
                       </div>
                     </div>
+
+                    {/* Botões de ação para o preview */}
+                    {previewUrl && (
+                      <div className="flex justify-center gap-2 mt-4">
+                        <Button size="sm" variant="outline" onClick={openPreviewInNewWindow} className="text-xs">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Abrir em Nova Janela
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={copyPreviewLink} className="text-xs">
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copiar Link
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center text-muted-foreground py-12">
@@ -505,12 +641,21 @@ export function DesignerExport() {
                         className="bg-black rounded-lg overflow-hidden"
                         style={{ maxWidth: "375px", margin: "0 auto" }}
                       >
-                        <iframe
-                          src={videoUrl}
-                          className="w-full aspect-[9/16]"
-                          title="Vídeo gerado"
-                          allowFullScreen
-                        ></iframe>
+                        {/* Exibir o preview do card como vídeo */}
+                        <div className="w-full aspect-[9/16] relative">
+                          {/* Usar um container para o vídeo */}
+                          <div ref={videoContainerRef} className="absolute inset-0 bg-white"></div>
+                        </div>
+                      </div>
+                      <div className="flex justify-center gap-2 mt-2">
+                        <Button size="sm" variant="outline" onClick={openPreviewInNewWindow} className="text-xs">
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Abrir em Nova Janela
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={copyPreviewLink} className="text-xs">
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copiar Link
+                        </Button>
                       </div>
                       <Alert className="bg-green-50 border-green-200">
                         <AlertCircle className="h-4 w-4 text-green-600" />
@@ -519,6 +664,26 @@ export function DesignerExport() {
                           foi salvo para publicação.
                         </AlertDescription>
                       </Alert>
+                      {videoData && (
+                        <div className="text-xs space-y-1 bg-gray-50 p-2 rounded-md">
+                          <p>
+                            <strong>Produto:</strong> {videoData.productName}
+                          </p>
+                          <p>
+                            <strong>Duração:</strong> {videoData.duration} segundos
+                          </p>
+                          <p>
+                            <strong>Criado em:</strong>{" "}
+                            {new Date(videoData.createdAt).toLocaleString("pt-BR", {
+                              day: "2-digit",
+                              month: "2-digit",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <Card>

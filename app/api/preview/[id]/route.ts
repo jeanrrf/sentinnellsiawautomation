@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getCachedDescription } from "@/lib/redis"
+import { getCachedDescription, getCachedProduct } from "@/lib/redis"
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
@@ -8,35 +8,56 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const style = url.searchParams.get("style") || "portrait"
     const timestamp = url.searchParams.get("t") || Date.now().toString()
 
-    console.log(`Generating preview for product ID: ${productId} with style: ${style} at ${timestamp}`)
+    console.log(`Gerando preview para product ID: ${productId} com style: ${style} at ${timestamp}`)
 
-    // Fetch product data from the products API
-    let product = null
-    try {
-      const productsResponse = await fetch(new URL("/api/products", request.url).toString())
+    // Primeiro, tente obter o produto do cache
+    let product = await getCachedProduct(productId)
 
-      if (!productsResponse.ok) {
-        throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
+    // Se não encontrar no cache, busque da API
+    if (!product) {
+      try {
+        const productsResponse = await fetch(new URL("/api/products", request.url).toString())
+
+        if (!productsResponse.ok) {
+          throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
+        }
+
+        const productsData = await productsResponse.json()
+        product = productsData.products.find((p: any) => p.itemId === productId)
+      } catch (error) {
+        console.error("Error fetching product:", error)
+        return new NextResponse(`Error fetching product: ${error.message}`, {
+          status: 500,
+          headers: {
+            "Content-Type": "text/plain",
+          },
+        })
       }
-
-      const productsData = await productsResponse.json()
-      product = productsData.products.find((p: any) => p.itemId === productId)
-    } catch (error) {
-      console.error("Error fetching product:", error)
-      return new NextResponse(`Error fetching product: ${error.message}`, {
-        status: 500,
-        headers: {
-          "Content-Type": "text/plain",
-        },
-      })
     }
 
     if (!product) {
       console.error(`Product not found: ${productId}`)
-      return new NextResponse(`Product not found: ${productId}`, {
-        status: 404,
+
+      // Criar um produto fictício para evitar erros
+      product = {
+        itemId: productId,
+        productName: "Produto não encontrado",
+        price: "0.00",
+        imageUrl: "https://via.placeholder.com/300x300?text=Produto+Não+Encontrado",
+        sales: "0",
+        ratingStar: "0",
+        offerLink: "#",
+      }
+
+      // Retornar um template básico em vez de um erro
+      const htmlTemplate = renderBasicTemplate(product)
+
+      return new NextResponse(htmlTemplate, {
         headers: {
-          "Content-Type": "text/plain",
+          "Content-Type": "text/html",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
       })
     }
@@ -77,6 +98,85 @@ export async function GET(request: Request, { params }: { params: { id: string }
       },
     })
   }
+}
+
+// Função para renderizar um template básico quando o produto não é encontrado
+function renderBasicTemplate(product: any) {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Card Produto TikTok</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Bruno Ace SC', sans-serif;
+      background: #0f0f0f;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      width: 90%;
+      max-width: 500px;
+      background: rgba(30, 30, 30, 0.8);
+      border-radius: 15px;
+      padding: 20px;
+      text-align: center;
+    }
+    .logo {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 20px;
+      background: linear-gradient(45deg, #ff007a, #b155ff);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    .product-image {
+      width: 100%;
+      max-height: 300px;
+      object-fit: contain;
+      margin: 15px 0;
+      border-radius: 10px;
+    }
+    .product-title {
+      font-size: 18px;
+      margin-bottom: 10px;
+    }
+    .price {
+      font-size: 24px;
+      color: #ff0055;
+      margin-bottom: 15px;
+    }
+    .buy-button {
+      display: inline-block;
+      padding: 10px 30px;
+      background: linear-gradient(45deg, #c21244, #15e4ff);
+      color: white;
+      text-decoration: none;
+      border-radius: 30px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Sales Martins</div>
+    <h1 class="product-title">${product.productName}</h1>
+    <img src="${product.imageUrl}" alt="${product.productName}" class="product-image">
+    <p class="price">R$ ${Number(product.price).toFixed(2)}</p>
+    <p>Vendas: ${product.sales}+</p>
+    <a href="${product.offerLink || "#"}" class="buy-button">COMPRAR AGORA</a>
+  </div>
+</body>
+</html>`
 }
 
 // Fallback description generator
@@ -128,9 +228,26 @@ function renderProductCardTemplate(product: any, description: string, style = "p
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Card Produto TikTok</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet">
   <style>
     /* Reset e configurações básicas */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Bruno Ace SC', sans-serif;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+
     .sm-card-container * {
       box-sizing: border-box;
       margin: 0;

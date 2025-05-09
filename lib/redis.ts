@@ -24,6 +24,9 @@ try {
     exists: async () => 0,
     scard: async () => 0,
     keys: async () => [],
+    smembers: async () => [],
+    srem: async () => 0,
+    del: async () => 0,
   } as unknown as Redis
 }
 
@@ -34,6 +37,7 @@ export const CACHE_TTL = {
   PROCESSED_IDS: 60 * 60 * 24 * 7, // 7 days
   PUBLISHED_VIDEOS: 60 * 60 * 24 * 30, // 30 days
   EXCLUDED_PRODUCTS: 60 * 60 * 24 * 90, // 90 days (produtos que não devem ser buscados novamente)
+  VIDEOS: 60 * 60 * 24 * 30, // 30 days for videos
 }
 
 // Cache keys
@@ -245,12 +249,21 @@ export async function saveVideo(videoData: any): Promise<void> {
       throw new Error("ID do produto é obrigatório para salvar o vídeo")
     }
 
+    // Garantir que estamos salvando uma string JSON
+    const videoDataString = typeof videoData === "string" ? videoData : JSON.stringify(videoData)
+
     // Adicionar ID do vídeo ao conjunto de vídeos
     await redis.sadd(CACHE_KEYS.VIDEOS, productId)
 
+    // Definir TTL se o conjunto for recém-criado
+    const ttl = await redis.ttl(CACHE_KEYS.VIDEOS)
+    if (ttl < 0) {
+      await redis.expire(CACHE_KEYS.VIDEOS, CACHE_TTL.VIDEOS)
+    }
+
     // Salvar dados do vídeo
-    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`, JSON.stringify(videoData), {
-      ex: CACHE_TTL.PROCESSED_IDS,
+    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`, videoDataString, {
+      ex: CACHE_TTL.VIDEOS,
     })
 
     // Adicionar o produto à lista de excluídos
@@ -276,13 +289,25 @@ export async function getVideos(): Promise<any[]> {
 
     const videos = []
     for (const videoId of videoIds) {
-      const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
-      if (videoData) {
-        try {
-          videos.push(JSON.parse(videoData))
-        } catch (e) {
-          console.error(`Erro ao analisar dados do vídeo ${videoId}:`, e)
+      try {
+        const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+        if (videoData) {
+          // Garantir que estamos lidando com uma string antes de fazer o parse
+          if (typeof videoData === "string") {
+            try {
+              videos.push(JSON.parse(videoData))
+            } catch (parseError) {
+              console.error(`Erro ao analisar dados do vídeo ${videoId}:`, parseError)
+              // Tentar usar os dados brutos se o parse falhar
+              videos.push({ productId: videoId, error: "Erro ao analisar dados", rawData: videoData })
+            }
+          } else if (typeof videoData === "object") {
+            // Se já for um objeto, usar diretamente
+            videos.push(videoData)
+          }
         }
+      } catch (error) {
+        console.error(`Erro ao obter vídeo ${videoId}:`, error)
       }
     }
 
@@ -317,7 +342,19 @@ export async function publishVideo(productId: string): Promise<void> {
     await redis.srem(CACHE_KEYS.VIDEOS, productId)
 
     // Atualizar os dados do vídeo com a data de publicação
-    const videoObj = JSON.parse(videoData)
+    let videoObj
+    if (typeof videoData === "string") {
+      try {
+        videoObj = JSON.parse(videoData)
+      } catch (error) {
+        console.error(`Erro ao analisar dados do vídeo ${productId}:`, error)
+        // Criar um objeto básico se o parse falhar
+        videoObj = { productId, error: "Erro ao analisar dados" }
+      }
+    } else {
+      videoObj = videoData
+    }
+
     videoObj.publishedAt = new Date().toISOString()
 
     // Salvar os dados atualizados
@@ -345,13 +382,25 @@ export async function getPublishedVideos(): Promise<any[]> {
 
     const videos = []
     for (const videoId of videoIds) {
-      const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
-      if (videoData) {
-        try {
-          videos.push(JSON.parse(videoData))
-        } catch (e) {
-          console.error(`Erro ao analisar dados do vídeo publicado ${videoId}:`, e)
+      try {
+        const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+        if (videoData) {
+          // Garantir que estamos lidando com uma string antes de fazer o parse
+          if (typeof videoData === "string") {
+            try {
+              videos.push(JSON.parse(videoData))
+            } catch (parseError) {
+              console.error(`Erro ao analisar dados do vídeo publicado ${videoId}:`, parseError)
+              // Tentar usar os dados brutos se o parse falhar
+              videos.push({ productId: videoId, error: "Erro ao analisar dados", rawData: videoData })
+            }
+          } else if (typeof videoData === "object") {
+            // Se já for um objeto, usar diretamente
+            videos.push(videoData)
+          }
         }
+      } catch (error) {
+        console.error(`Erro ao obter vídeo publicado ${videoId}:`, error)
       }
     }
 
