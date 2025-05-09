@@ -23,16 +23,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: "Produto não encontrado" }, { status: 404 })
     }
 
+    // Gerar timestamp único para o vídeo
+    const timestamp = Date.now()
+
     // Criar dados do vídeo
     const videoData = {
+      id: `video_${timestamp}`,
       productId,
       productName: product.productName,
       imageUrl: product.imageUrl,
       price: product.price,
       duration: duration || 5,
       createdAt: new Date().toISOString(),
-      status: "pending", // pending, published, failed
-      videoUrl: `/api/preview/${productId}?t=${Date.now()}`, // URL para visualização do vídeo
+      status: "generated", // generated, published, failed
+      videoUrl: `/api/preview/${productId}?style=portrait&t=${timestamp}`, // URL para visualização do vídeo
     }
 
     // Salvar vídeo no Redis

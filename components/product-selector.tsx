@@ -21,21 +21,36 @@ interface ProductSelectorProps {
 export function ProductSelector({ products, value, onChange }: ProductSelectorProps) {
   const [open, setOpen] = useState(false)
 
+  // Função para truncar o nome do produto se for muito longo
+  const truncateProductName = (name: string, maxLength = 50) => {
+    if (name.length <= maxLength) return name
+    return name.substring(0, maxLength) + "..."
+  }
+
+  // Encontrar o produto selecionado
+  const selectedProduct = products.find((product) => product.itemId === value)
+
+  // Texto a ser exibido no botão
+  const buttonText = selectedProduct ? truncateProductName(selectedProduct.productName) : "Selecione um produto"
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
-          {value
-            ? products.find((product) => product.itemId === value)?.productName || "Select product"
-            : "Select product"}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between overflow-hidden"
+        >
+          <span className="truncate mr-2">{buttonText}</span>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50 ml-auto" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0">
         <Command>
-          <CommandInput placeholder="Search products..." />
+          <CommandInput placeholder="Buscar produtos..." />
           <CommandList>
-            <CommandEmpty>No product found.</CommandEmpty>
+            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
             <CommandGroup className="max-h-[300px] overflow-y-auto">
               {products.map((product) => (
                 <CommandItem
@@ -47,7 +62,7 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
                   }}
                 >
                   <Check className={cn("mr-2 h-4 w-4", value === product.itemId ? "opacity-100" : "opacity-0")} />
-                  {product.productName}
+                  <span className="truncate">{product.productName}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

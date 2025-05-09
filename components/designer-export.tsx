@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Video } from "lucide-react"
+import { Loader2, Video, AlertCircle } from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -16,13 +16,6 @@ import { Progress } from "@/components/ui/progress"
 
 /**
  * DesignerExport - Componente principal para criação e geração de cards para TikTok
- *
- * Este componente permite:
- * 1. Selecionar um produto da loja
- * 2. Gerar uma descrição usando IA ou personalizada
- * 3. Escolher o estilo do card (retrato, quadrado, paisagem)
- * 4. Visualizar o card em formato TikTok
- * 5. Gravar um vídeo do card para publicação
  */
 export function DesignerExport() {
   // Estados para controle de produtos e seleção
@@ -37,6 +30,8 @@ export function DesignerExport() {
   const [generationProgress, setGenerationProgress] = useState(0)
   const [htmlTemplate, setHtmlTemplate] = useState("")
   const [previewUrl, setPreviewUrl] = useState("")
+  const [videoUrl, setVideoUrl] = useState("")
+  const [videoGenerated, setVideoGenerated] = useState(false)
 
   // Estados para configuração do card
   const [useAI, setUseAI] = useState(true)
@@ -52,6 +47,7 @@ export function DesignerExport() {
   // Referências para manipulação do DOM
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
 
   // Hook de toast para notificações
   const { toast } = useToast()
@@ -130,36 +126,8 @@ export function DesignerExport() {
     }
   }, [htmlTemplate])
 
-  // Ajustar o layout do preview do TikTok quando o tamanho da tela mudar
-  useEffect(() => {
-    const adjustTikTokPreview = () => {
-      if (tiktokPreviewRef.current) {
-        const container = tiktokPreviewRef.current
-
-        // Definir largura fixa e calcular altura para manter proporção 9:16
-        const containerWidth = 375 // Largura fixa de um celular típico
-        const containerHeight = containerWidth * (16 / 9)
-
-        container.style.width = `${containerWidth}px`
-        container.style.height = `${containerHeight}px`
-      }
-    }
-
-    // Executar ajuste imediatamente
-    adjustTikTokPreview()
-
-    // Adicionar listener para redimensionamento
-    window.addEventListener("resize", adjustTikTokPreview)
-
-    // Limpar listener
-    return () => {
-      window.removeEventListener("resize", adjustTikTokPreview)
-    }
-  }, [activeTab])
-
   /**
    * Simula o progresso da geração do card
-   * Usado para feedback visual durante o processo de geração
    */
   const simulateProgress = () => {
     setGenerationProgress(0)
@@ -178,7 +146,6 @@ export function DesignerExport() {
 
   /**
    * Manipula a geração do card
-   * Faz a requisição para a API e atualiza o estado com o resultado
    */
   const handleGenerate = async () => {
     if (!selectedProduct) {
@@ -186,7 +153,7 @@ export function DesignerExport() {
         variant: "destructive",
         title: "Erro ao gerar card",
         description: "Selecione um produto primeiro",
-        className: "bg-red-100 border-red-500 text-red-800", // Estilo semáforo para erro
+        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
       return
     }
@@ -194,6 +161,7 @@ export function DesignerExport() {
     setIsGenerating(true)
     setGenerationStep("Iniciando geração do card...")
     const stopProgress = simulateProgress()
+    setVideoGenerated(false)
 
     try {
       console.log("Gerando card para o produto:", selectedProduct)
@@ -235,7 +203,7 @@ export function DesignerExport() {
       toast({
         title: "Card gerado com sucesso",
         description: "Você pode visualizar o card na aba de preview",
-        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para sucesso
+        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
     } catch (error: any) {
       console.error("Erro ao gerar vídeo:", error)
@@ -244,7 +212,7 @@ export function DesignerExport() {
         variant: "destructive",
         title: "Erro ao gerar o card",
         description: error.message,
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para erro
+        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
     } finally {
       stopProgress()
@@ -257,7 +225,6 @@ export function DesignerExport() {
 
   /**
    * Manipula a gravação do vídeo
-   * Simula a gravação e salva o vídeo no Redis
    */
   const handleRecordVideo = async () => {
     if (!previewUrl) {
@@ -265,7 +232,7 @@ export function DesignerExport() {
         variant: "destructive",
         title: "Erro ao gravar vídeo",
         description: "Gere um card primeiro",
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para erro
+        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
       return
     }
@@ -278,7 +245,7 @@ export function DesignerExport() {
         title: "Gravando vídeo",
         description: `Gravando vídeo de ${recordingDuration} segundos...`,
         className:
-          "bg-yellow-100 border-yellow-500 text-yellow-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para aviso
+          "bg-yellow-100 border-yellow-500 text-yellow-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
 
       // Simular tempo de gravação
@@ -300,10 +267,21 @@ export function DesignerExport() {
         throw new Error("Falha ao salvar o vídeo")
       }
 
+      const data = await response.json()
+
+      if (data.success && data.video) {
+        // Definir a URL do vídeo para exibição
+        setVideoUrl(data.video.videoUrl)
+        setVideoGenerated(true)
+
+        // Mudar para a aba de vídeo para mostrar o resultado
+        setActiveTab("video")
+      }
+
       toast({
         title: "Vídeo gravado com sucesso",
         description: "O vídeo foi salvo e está pronto para ser publicado",
-        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para sucesso
+        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
     } catch (error: any) {
       console.error("Erro ao gravar vídeo:", error)
@@ -311,7 +289,7 @@ export function DesignerExport() {
         variant: "destructive",
         title: "Erro ao gravar vídeo",
         description: error.message,
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50", // Estilo semáforo para erro
+        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
       })
     } finally {
       setIsRecording(false)
@@ -319,8 +297,7 @@ export function DesignerExport() {
   }
 
   return (
-    // Layout comprimido com menos espaço entre elementos
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+    <div className="grid grid-cols-1 lg:grid-cols-[1fr_375px] gap-4 mt-2">
       {/* Formulário de geração */}
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
@@ -437,135 +414,161 @@ export function DesignerExport() {
         </CardFooter>
       </Card>
 
-      {/* Preview Card - Simplificado apenas para TikTok */}
-      <Card className="shadow-sm flex flex-col">
-        <CardHeader className="pb-2">
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-lg">Preview TikTok</CardTitle>
-              <CardDescription className="text-xs">Visualize seu card no formato TikTok</CardDescription>
+      {/* Preview Card - Layout fixo para TikTok */}
+      <div className="lg:sticky lg:top-4 lg:self-start">
+        <Card className="shadow-sm flex flex-col">
+          <CardHeader className="pb-2">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-lg">Preview TikTok</CardTitle>
+                <CardDescription className="text-xs">Visualize seu card no formato TikTok</CardDescription>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0 flex-grow overflow-hidden">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
-            <TabsList className="w-full flex-shrink-0">
-              <TabsTrigger value="preview" className="text-sm">
-                Preview
-              </TabsTrigger>
-              <TabsTrigger value="video" className="text-sm">
-                Vídeo
-              </TabsTrigger>
-            </TabsList>
+          </CardHeader>
+          <CardContent className="p-0 flex-grow overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
+              <TabsList className="w-full flex-shrink-0">
+                <TabsTrigger value="preview" className="text-sm">
+                  Preview
+                </TabsTrigger>
+                <TabsTrigger value="video" className="text-sm">
+                  Vídeo
+                </TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="preview" className="p-4 flex-grow overflow-hidden">
-              {htmlTemplate ? (
-                <div className="flex flex-col items-center justify-center h-full">
-                  <div
-                    ref={tiktokPreviewRef}
-                    className="tiktok-preview-container bg-black relative overflow-hidden"
-                    style={{
-                      width: "375px",
-                      height: "667px",
-                      margin: "0 auto",
-                    }}
-                  >
-                    {/* TikTok UI Header */}
-                    <div className="w-full bg-black text-white p-2 flex justify-between items-center">
-                      <div className="flex items-center">
-                        <span className="text-sm font-medium">TikTok Preview</span>
+              <TabsContent value="preview" className="p-4 flex-grow overflow-hidden">
+                {htmlTemplate ? (
+                  <div className="flex flex-col items-center justify-center h-full">
+                    <div
+                      ref={tiktokPreviewRef}
+                      className="tiktok-preview-container bg-black relative overflow-hidden"
+                      style={{
+                        width: "100%",
+                        maxWidth: "375px",
+                        height: "667px",
+                        margin: "0 auto",
+                      }}
+                    >
+                      {/* TikTok UI Header */}
+                      <div className="w-full bg-black text-white p-2 flex justify-between items-center">
+                        <div className="flex items-center">
+                          <span className="text-sm font-medium">TikTok Preview</span>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <span className="text-sm">@autoseller</span>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <span className="text-sm">@autoseller</span>
-                      </div>
-                    </div>
 
-                    {/* TikTok Video Container - Proporção exata 9:16 */}
-                    <div className="relative w-full" style={{ height: "calc(100% - 80px)" }}>
-                      <div className="w-full h-full overflow-hidden relative">
-                        {previewError ? (
-                          <div className="flex items-center justify-center h-full bg-muted">
-                            <p className="text-muted-foreground text-center text-sm">
-                              Não foi possível renderizar o preview. <br />
-                              Tente gerar o card novamente.
-                            </p>
-                          </div>
-                        ) : (
-                          <div ref={previewContainerRef} className="w-full h-full overflow-hidden" />
-                        )}
+                      {/* TikTok Video Container - Proporção exata 9:16 */}
+                      <div className="relative w-full" style={{ height: "calc(100% - 80px)" }}>
+                        <div className="w-full h-full overflow-hidden relative">
+                          {previewError ? (
+                            <div className="flex items-center justify-center h-full bg-muted">
+                              <p className="text-muted-foreground text-center text-sm">
+                                Não foi possível renderizar o preview. <br />
+                                Tente gerar o card novamente.
+                              </p>
+                            </div>
+                          ) : (
+                            <div ref={previewContainerRef} className="w-full h-full overflow-hidden" />
+                          )}
+                        </div>
                       </div>
-                    </div>
 
-                    {/* TikTok Bottom Bar */}
-                    <div className="w-full bg-black text-white p-2 flex justify-around items-center">
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs">Para você</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs">Seguindo</span>
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <span className="text-xs">Pesquisar</span>
+                      {/* TikTok Bottom Bar */}
+                      <div className="w-full bg-black text-white p-2 flex justify-around items-center">
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs">Para você</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs">Seguindo</span>
+                        </div>
+                        <div className="flex flex-col items-center">
+                          <span className="text-xs">Pesquisar</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div className="text-center text-muted-foreground py-12">
-                  <Video className="mx-auto h-12 w-12 mb-2" />
-                  <p className="text-sm">Gere um card para visualizá-lo aqui</p>
-                </div>
-              )}
-            </TabsContent>
+                ) : (
+                  <div className="text-center text-muted-foreground py-12">
+                    <Video className="mx-auto h-12 w-12 mb-2" />
+                    <p className="text-sm">Gere um card para visualizá-lo aqui</p>
+                  </div>
+                )}
+              </TabsContent>
 
-            <TabsContent value="video" className="p-4">
-              <div className="flex flex-col gap-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg">Gravação de Vídeo</CardTitle>
-                    <CardDescription className="text-xs">
-                      Grave um vídeo do card para publicação no TikTok
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="space-y-3">
-                      <p className="text-sm">
-                        Ao clicar em "Gravar Vídeo", o sistema irá capturar o card por {recordingDuration} segundos e
-                        salvar o vídeo para publicação posterior.
-                      </p>
-
-                      <Alert>
-                        <AlertDescription className="text-xs">
-                          Certifique-se de que o card está gerado e visível na aba Preview antes de gravar o vídeo.
+              <TabsContent value="video" className="p-4">
+                <div className="flex flex-col gap-4">
+                  {videoGenerated ? (
+                    <div className="space-y-4">
+                      <div
+                        className="bg-black rounded-lg overflow-hidden"
+                        style={{ maxWidth: "375px", margin: "0 auto" }}
+                      >
+                        <iframe
+                          src={videoUrl}
+                          className="w-full aspect-[9/16]"
+                          title="Vídeo gerado"
+                          allowFullScreen
+                        ></iframe>
+                      </div>
+                      <Alert className="bg-green-50 border-green-200">
+                        <AlertCircle className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-xs text-green-800">
+                          Vídeo gerado com sucesso! O produto foi removido da lista de produtos disponíveis e o vídeo
+                          foi salvo para publicação.
                         </AlertDescription>
                       </Alert>
                     </div>
-                  </CardContent>
-                  <CardFooter className="pt-0">
-                    <Button
-                      onClick={handleRecordVideo}
-                      disabled={!htmlTemplate || isRecording}
-                      className="w-full h-9 text-sm"
-                    >
-                      {isRecording ? (
-                        <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          Gravando ({recordingDuration}s)...
-                        </>
-                      ) : (
-                        <>
-                          <Video className="mr-2 h-3 w-3" />
-                          Gravar Vídeo
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </div>
-            </TabsContent>
-          </Tabs>
-        </CardContent>
-      </Card>
+                  ) : (
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-lg">Gravação de Vídeo</CardTitle>
+                        <CardDescription className="text-xs">
+                          Grave um vídeo do card para publicação no TikTok
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="space-y-3">
+                          <p className="text-sm">
+                            Ao clicar em "Gravar Vídeo", o sistema irá capturar o card por {recordingDuration} segundos
+                            e salvar o vídeo para publicação posterior.
+                          </p>
+
+                          <Alert>
+                            <AlertDescription className="text-xs">
+                              Certifique-se de que o card está gerado e visível na aba Preview antes de gravar o vídeo.
+                            </AlertDescription>
+                          </Alert>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="pt-0">
+                        <Button
+                          onClick={handleRecordVideo}
+                          disabled={!htmlTemplate || isRecording}
+                          className="w-full h-9 text-sm"
+                        >
+                          {isRecording ? (
+                            <>
+                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                              Gravando ({recordingDuration}s)...
+                            </>
+                          ) : (
+                            <>
+                              <Video className="mr-2 h-3 w-3" />
+                              Gravar Vídeo
+                            </>
+                          )}
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
