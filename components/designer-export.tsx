@@ -7,33 +7,17 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import {
-  Loader2,
-  Video,
-  Camera,
-  Copy,
-  ExternalLink,
-  RefreshCw,
-  CheckCircle,
-  Download,
-  Heart,
-  MessageCircle,
-  Bookmark,
-  Share2,
-  Maximize2,
-  Minimize2,
-} from "lucide-react"
+import { Loader2, Video, Camera, Copy, ExternalLink, Download, Maximize2, Minimize2 } from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 
-interface VideoGeneratorProps {
-  products: any[]
-}
-
-export function VideoGenerator({ products }: VideoGeneratorProps) {
+export function DesignerExport() {
+  const [isLoading, setIsLoading] = useState(true)
+  const [products, setProducts] = useState([])
+  const [error, setError] = useState("")
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStep, setGenerationStep] = useState<string | null>(null)
   const [generationProgress, setGenerationProgress] = useState(0)
@@ -47,18 +31,35 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
   const [previewError, setPreviewError] = useState(false)
   const [previewMode, setPreviewMode] = useState<"standard" | "tiktok">("tiktok")
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(5)
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
 
-  // Carregar o produto selecionado do localStorage quando o componente montar
   useEffect(() => {
-    const storedProductId = localStorage.getItem("selectedProductId")
-    if (storedProductId) {
-      setSelectedProduct(storedProductId)
-      // Limpar o localStorage para não persistir a seleção entre sessões
-      localStorage.removeItem("selectedProductId")
+    const fetchProducts = async () => {
+      try {
+        setIsLoading(true)
+        setError("")
+
+        const response = await fetch("/api/products")
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
+        }
+
+        const data = await response.json()
+        setProducts(data.products || [])
+      } catch (err: any) {
+        setError(err.message || "An error occurred while fetching products")
+        console.error("Error fetching products:", err)
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    fetchProducts()
   }, [])
 
   // Limpar o preview quando o componente for desmontado
@@ -146,34 +147,6 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
     }
   }, [previewMode, isFullscreen, activeTab])
 
-  const handleFetchProducts = async () => {
-    try {
-      const response = await fetch("/api/fetch-shopee", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Reload the page to show the new products
-        window.location.reload()
-      } else {
-        throw new Error(data.message || "Failed to fetch products from Shopee")
-      }
-    } catch (err) {
-      console.error(err)
-      toast({
-        variant: "destructive",
-        title: "Erro ao buscar produtos",
-        description: err.message,
-      })
-    }
-  }
-
   const simulateProgress = () => {
     setGenerationProgress(0)
     const interval = setInterval(() => {
@@ -206,61 +179,34 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
     try {
       console.log("Gerando card para o produto:", selectedProduct)
 
-      // Encontrar o produto selecionado para exibir informações
-      const productInfo = products.find((p) => p.itemId === selectedProduct)
-      if (productInfo) {
-        console.log("Informações do produto:", productInfo.productName)
-      }
-
       setGenerationStep("Buscando informações do produto...")
 
-      // Gerar o card localmente sem depender do Redis
-      const product = products.find((p) => p.itemId === selectedProduct)
+      // Fazer a requisição para a API de geração de vídeo
+      const response = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          productId: selectedProduct,
+          useAI,
+          customDescription: useAI ? undefined : customDescription,
+          videoStyle,
+        }),
+      })
 
-      if (!product) {
-        throw new Error("Produto não encontrado")
+      if (!response.ok) {
+        throw new Error(`Failed to generate video: ${response.status} ${response.statusText}`)
       }
 
-      setGenerationStep("Gerando descrição...")
+      const data = await response.json()
 
-      // Usar descrição personalizada ou gerar uma descrição simples
-      let description = ""
-      if (!useAI) {
-        description = customDescription
-      } else {
-        try {
-          // Tentar obter descrição da API
-          const descResponse = await fetch("/api/generate-description", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ product }),
-          })
-
-          if (descResponse.ok) {
-            const descData = await descResponse.json()
-            description = descData.description
-          } else {
-            // Fallback para descrição local
-            description = createFallbackDescription(product)
-          }
-        } catch (error) {
-          console.error("Error generating description:", error)
-          description = createFallbackDescription(product)
-        }
+      if (!data.success) {
+        throw new Error(data.message || "Failed to generate video")
       }
 
-      setGenerationStep("Renderizando template...")
-
-      // Gerar o HTML do template localmente
-      const html = renderProductCardTemplate(product, description, videoStyle)
-      setHtmlTemplate(html)
-
-      // Criar URL para abrir em nova aba
-      const blob = new Blob([html], { type: "text/html" })
-      const url = URL.createObjectURL(blob)
-      setPreviewUrl(url)
+      setHtmlTemplate(data.htmlTemplate)
+      setPreviewUrl(`/api/preview/${selectedProduct}?style=${videoStyle}&t=${Date.now()}`)
 
       setGenerationProgress(100)
 
@@ -273,9 +219,8 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       toast({
         title: "Card gerado com sucesso",
         description: "Você pode visualizar o card na aba de preview",
-        icon: <CheckCircle className="h-4 w-4 text-green-500" />,
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating video:", error)
       setGenerationProgress(0)
       toast({
@@ -299,7 +244,6 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
         toast({
           title: "HTML copiado",
           description: "O código HTML do card foi copiado para a área de transferência",
-          icon: <CheckCircle className="h-4 w-4 text-green-500" />,
         })
       })
       .catch((err) => {
@@ -354,7 +298,6 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
     toast({
       title: "HTML baixado",
       description: "O arquivo HTML do card foi baixado",
-      icon: <CheckCircle className="h-4 w-4 text-green-500" />,
     })
   }
 
@@ -362,22 +305,59 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
     setIsFullscreen(!isFullscreen)
   }
 
-  if (products.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <Alert className="mb-6">
-          <AlertDescription>Você precisa buscar produtos da Shopee antes de usar o gerador de cards.</AlertDescription>
-        </Alert>
-        <Button onClick={handleFetchProducts}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Buscar Produtos da Shopee
-        </Button>
-      </div>
-    )
-  }
+  const handleRecordVideo = async () => {
+    if (!previewUrl) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao gravar vídeo",
+        description: "Gere um card primeiro",
+      })
+      return
+    }
 
-  // Encontrar o produto selecionado para exibir informações
-  const selectedProductInfo = products.find((p) => p.itemId === selectedProduct)
+    setIsRecording(true)
+
+    try {
+      // Simular gravação de vídeo
+      toast({
+        title: "Gravando vídeo",
+        description: `Gravando vídeo de ${recordingDuration} segundos...`,
+      })
+
+      // Simular tempo de gravação
+      await new Promise((resolve) => setTimeout(resolve, recordingDuration * 1000))
+
+      // Simular salvamento no Redis
+      const response = await fetch("/api/save-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          productId: selectedProduct,
+          duration: recordingDuration,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Falha ao salvar o vídeo")
+      }
+
+      toast({
+        title: "Vídeo gravado com sucesso",
+        description: "O vídeo foi salvo e está pronto para ser publicado",
+      })
+    } catch (error: any) {
+      console.error("Error recording video:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao gravar vídeo",
+        description: error.message,
+      })
+    } finally {
+      setIsRecording(false)
+    }
+  }
 
   return (
     <div
@@ -391,21 +371,21 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       {!(isFullscreen && previewMode === "tiktok" && activeTab === "preview") && (
         <Card>
           <CardHeader>
-            <CardTitle>Gerador de Cards</CardTitle>
-            <CardDescription>Crie cards para TikTok a partir de produtos da Shopee</CardDescription>
+            <CardTitle>Designer de Cards</CardTitle>
+            <CardDescription>Crie cards personalizados para TikTok</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="product">Selecione o Produto</Label>
               <ProductSelector products={products} value={selectedProduct} onChange={setSelectedProduct} />
 
-              {selectedProductInfo && (
+              {selectedProduct && products.find((p) => p.itemId === selectedProduct) && (
                 <div className="mt-2 p-3 bg-muted rounded-md">
                   <p className="font-medium text-sm">Produto selecionado:</p>
-                  <p className="text-sm truncate">{selectedProductInfo.productName}</p>
+                  <p className="text-sm truncate">{products.find((p) => p.itemId === selectedProduct)?.productName}</p>
                   <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-                    <span>Preço: R$ {selectedProductInfo.price}</span>
-                    <span>Vendas: {selectedProductInfo.sales}</span>
+                    <span>Preço: R$ {products.find((p) => p.itemId === selectedProduct)?.price}</span>
+                    <span>Vendas: {products.find((p) => p.itemId === selectedProduct)?.sales}</span>
                   </div>
                 </div>
               )}
@@ -440,13 +420,31 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
             <div className="space-y-2">
               <Label htmlFor="videoStyle">Estilo do Card</Label>
               <Select value={videoStyle} onValueChange={setVideoStyle}>
-                <SelectTrigger>
+                <SelectTrigger id="videoStyle">
                   <SelectValue placeholder="Selecione o estilo do card" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="portrait">Retrato (9:16)</SelectItem>
                   <SelectItem value="square">Quadrado (1:1)</SelectItem>
                   <SelectItem value="landscape">Paisagem (16:9)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="recordingDuration">Duração do Vídeo (segundos)</Label>
+              <Select
+                value={recordingDuration.toString()}
+                onValueChange={(value) => setRecordingDuration(Number.parseInt(value))}
+              >
+                <SelectTrigger id="recordingDuration">
+                  <SelectValue placeholder="Selecione a duração" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 segundos</SelectItem>
+                  <SelectItem value="5">5 segundos</SelectItem>
+                  <SelectItem value="7">7 segundos</SelectItem>
+                  <SelectItem value="10">10 segundos</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -499,9 +497,6 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
                   >
                     {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                   </Button>
-                  <Label htmlFor="previewMode" className="text-sm">
-                    Modo:
-                  </Label>
                   <Select value={previewMode} onValueChange={(value: "standard" | "tiktok") => setPreviewMode(value)}>
                     <SelectTrigger className="h-8 w-[130px]">
                       <SelectValue placeholder="Modo de preview" />
@@ -521,6 +516,7 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
             <TabsList className="w-full flex-shrink-0">
               <TabsTrigger value="preview">Preview</TabsTrigger>
               <TabsTrigger value="html">HTML</TabsTrigger>
+              <TabsTrigger value="video">Vídeo</TabsTrigger>
             </TabsList>
 
             <TabsContent value="preview" className="p-4 flex-grow overflow-hidden">
@@ -543,7 +539,7 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
                           <span className="text-sm font-medium">TikTok Preview</span>
                         </div>
                         <div className="flex items-center space-x-4">
-                          <span className="text-sm">@sentinnell</span>
+                          <span className="text-sm">@autoseller</span>
                         </div>
                       </div>
 
@@ -560,26 +556,6 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
                           ) : (
                             <div ref={previewContainerRef} className="w-full h-full overflow-hidden" />
                           )}
-                        </div>
-
-                        {/* TikTok Side Buttons */}
-                        <div className="absolute right-2 bottom-20 flex flex-col items-center space-y-4">
-                          <div className="flex flex-col items-center">
-                            <Heart className="h-8 w-8 text-white" />
-                            <span className="text-white text-xs mt-1">12.3K</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <MessageCircle className="h-8 w-8 text-white" />
-                            <span className="text-white text-xs mt-1">423</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <Bookmark className="h-8 w-8 text-white" />
-                            <span className="text-white text-xs mt-1">2.1K</span>
-                          </div>
-                          <div className="flex flex-col items-center">
-                            <Share2 className="h-8 w-8 text-white" />
-                            <span className="text-white text-xs mt-1">Share</span>
-                          </div>
                         </div>
                       </div>
 
@@ -651,6 +627,46 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="video" className="p-4">
+              <div className="flex flex-col gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Gravação de Vídeo</CardTitle>
+                    <CardDescription>Grave um vídeo do card para publicação no TikTok</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <p className="text-sm">
+                        Ao clicar em "Gravar Vídeo", o sistema irá capturar o card por {recordingDuration} segundos e
+                        salvar o vídeo para publicação posterior.
+                      </p>
+
+                      <Alert>
+                        <AlertDescription>
+                          Certifique-se de que o card está gerado e visível na aba Preview antes de gravar o vídeo.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  </CardContent>
+                  <CardFooter>
+                    <Button onClick={handleRecordVideo} disabled={!htmlTemplate || isRecording} className="w-full">
+                      {isRecording ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Gravando ({recordingDuration}s)...
+                        </>
+                      ) : (
+                        <>
+                          <Video className="mr-2 h-4 w-4" />
+                          Gravar Vídeo
+                        </>
+                      )}
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </div>
+            </TabsContent>
           </Tabs>
         </CardContent>
         <CardFooter className="flex justify-between flex-shrink-0">
@@ -670,349 +686,4 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       </Card>
     </div>
   )
-}
-
-// Função para criar descrição de fallback
-function createFallbackDescription(product: any) {
-  const price = Number.parseFloat(product.price)
-  const stars = Number.parseFloat(product.ratingStar || "4.5")
-  const sales = Number.parseInt(product.sales)
-
-  // Criar uma descrição curta e direta
-  const urgency = sales > 1000 ? "🔥 OFERTA IMPERDÍVEL!" : "⚡ PROMOÇÃO!"
-  const rating = "⭐".repeat(Math.min(Math.round(stars), 5))
-
-  // Limitar o nome do produto a 30 caracteres
-  const shortName = product.productName.length > 30 ? product.productName.substring(0, 30) + "..." : product.productName
-
-  return `${urgency}\n${shortName}\n${rating}\nApenas R$${price.toFixed(2)}\nJá vendidos: ${sales}\n#oferta #shopee`
-}
-
-// Função para renderizar o template do card
-function renderProductCardTemplate(product: any, description: string, style = "portrait") {
-  if (!product) {
-    console.error("Product is undefined or null in renderProductCardTemplate")
-    throw new Error("Product is required to render template")
-  }
-
-  console.log(`Rendering template for product: ${product.itemId} with style: ${style}`)
-
-  // Usar o preço original calculado ou o preço atual se não houver desconto
-  const currentPrice = Number.parseFloat(product.price)
-  const originalPrice = product.calculatedOriginalPrice ? Number.parseFloat(product.calculatedOriginalPrice) : null
-
-  // Calcular a porcentagem de desconto se tivermos o preço original
-  let discountPercentage = null
-  if (originalPrice && originalPrice > currentPrice) {
-    discountPercentage = Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
-  } else if (product.priceDiscountRate) {
-    // Ou usar diretamente a taxa de desconto da API
-    discountPercentage = Math.round(Number.parseFloat(product.priceDiscountRate))
-  }
-
-  // Configurações de estilo baseadas no formato escolhido
-  const styleConfig = getStyleConfig(style)
-
-  // Adicionar prefixo a todas as classes CSS para evitar conflitos
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card Produto TikTok</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
-  <style>
-    /* Reset e configurações básicas */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Bruno Ace SC', sans-serif;
-    }
-
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-
-    body {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background-color: #0f0f0f;
-    }
-
-    .sm-card-container {
-      width: 100%;
-      height: 100%;
-      background: #0f0f0f;
-      overflow: hidden;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      aspect-ratio: ${style === "portrait" ? "9/16" : style === "square" ? "1/1" : "16/9"};
-    }
-
-    /* Background animado */
-    .sm-background {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(45deg, #6a00f4, #00e0ff, #6a00f4);
-      background-size: 400% 400%;
-      animation: sm-gradientBG 8s ease infinite;
-      opacity: 0.15;
-      z-index: 0;
-    }
-
-    @keyframes sm-gradientBG {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    /* Logo */
-    .sm-logo {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      z-index: 10;
-      font-size: 2.5rem;
-      font-weight: 700;
-      background: linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a);
-      background-size: 300% 300%;
-      background-clip: text;
-      -webkit-background-clip: text;
-      color: transparent;
-      -webkit-text-fill-color: transparent;
-      animation: sm-logoGradient 5s ease infinite;
-      filter: drop-shadow(0 2px 12px #b155ff88);
-    }
-
-    @keyframes sm-logoGradient {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    /* Card principal */
-    .sm-card {
-      position: relative;
-      width: ${styleConfig.cardWidth};
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: ${styleConfig.cardPadding};
-      z-index: 1;
-      background: rgba(15, 15, 15, 0.8);
-      backdrop-filter: blur(10px);
-      border-radius: 25px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    }
-
-    /* Imagem do produto */
-    .sm-product-image-container {
-      width: 100%;
-      height: ${styleConfig.imageHeight};
-      margin: 15px 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-      border-radius: 15px;
-    }
-
-    .sm-product-image {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      border-radius: 15px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-    }
-
-    /* Título do produto */
-    .sm-product-title {
-      font-size: ${styleConfig.fontSize.title};
-      line-height: 1.2;
-      text-align: center;
-      margin-bottom: 15px;
-      color: #ffffff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-      padding: 0 10px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    /* Preço */
-    .sm-price-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 15px 0;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .sm-current-price {
-      font-size: ${styleConfig.fontSize.price};
-      color: #ff0055;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .sm-original-price {
-      font-size: ${styleConfig.fontSize.oldPrice};
-      color: #cccccc;
-      text-decoration: line-through;
-      opacity: 0.7;
-    }
-
-    .sm-discount-badge {
-      background: #ff0055;
-      color: white;
-      font-size: ${styleConfig.fontSize.discount};
-      padding: 8px 15px;
-      border-radius: 50%;
-      margin-left: 10px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    }
-
-    /* Descrição */
-    .sm-product-description {
-      font-size: ${styleConfig.fontSize.desc};
-      color: #cccccc;
-      margin: 15px 0;
-      text-align: center;
-      white-space: pre-line;
-      max-height: ${styleConfig.descriptionHeight};
-      overflow-y: auto;
-      padding: 0 10px;
-    }
-
-    /* Informações adicionais */
-    .sm-product-info {
-      font-size: ${styleConfig.fontSize.info};
-      margin: 10px 0;
-      color: #cccccc;
-    }
-
-    .sm-star-rating {
-      color: #ffd700;
-    }
-
-    /* Botão de compra */
-    .sm-buy-button {
-      display: inline-block;
-      margin-top: 20px;
-      padding: 15px 40px;
-      background: linear-gradient(80deg, #c21244, #15e4ffb1);
-      color: #ffffff;
-      border-radius: 30px;
-      text-decoration: none;
-      font-size: ${styleConfig.fontSize.button};
-      text-align: center;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .sm-buy-button:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-    }
-  </style>
-</head>
-
-<body>
-  <div class="sm-card-container">
-    <div class="sm-background"></div>
-    <div class="sm-logo">Sales Martins</div>
-    
-    <div class="sm-card">
-      <h1 class="sm-product-title">${product.productName}</h1>
-      
-      <div class="sm-product-image-container">
-        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image" />
-      </div>
-      
-      <div class="sm-price-container">
-        <p class="sm-current-price">R$ ${currentPrice.toFixed(2)}</p>
-        ${originalPrice ? `<p class="sm-original-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
-        ${discountPercentage ? `<span class="sm-discount-badge">-${discountPercentage}%</span>` : ""}
-      </div>
-      
-      <p class="sm-product-description">${description}</p>
-      
-      <p class="sm-product-info">
-        <span class="sm-star-rating">★★★★★</span> ${product.ratingStar || "4.5"} | Vendas: ${product.sales}+
-      </p>
-      
-      <a href="${product.offerLink}" target="_blank" class="sm-buy-button">COMPRAR AGORA</a>
-    </div>
-  </div>
-</body>
-</html>`
-}
-
-// Função para obter configurações de estilo baseadas no formato escolhido
-function getStyleConfig(style: string) {
-  // Configurações padrão (retrato)
-  const config = {
-    width: "100%",
-    height: "100%",
-    cardWidth: "90%",
-    cardPadding: "30px",
-    imageHeight: "500px",
-    descriptionHeight: "200px",
-    fontSize: {
-      title: "42px",
-      price: "56px",
-      oldPrice: "32px",
-      discount: "28px",
-      desc: "32px",
-      info: "28px",
-      button: "32px",
-    },
-  }
-
-  // Ajustar configurações com base no estilo
-  if (style === "square") {
-    config.imageHeight = "400px"
-    config.descriptionHeight = "150px"
-    config.fontSize = {
-      title: "36px",
-      price: "48px",
-      oldPrice: "28px",
-      discount: "24px",
-      desc: "28px",
-      info: "24px",
-      button: "28px",
-    }
-  } else if (style === "landscape") {
-    config.cardWidth = "80%"
-    config.cardPadding = "25px"
-    config.imageHeight = "450px"
-    config.descriptionHeight = "120px"
-    config.fontSize = {
-      title: "40px",
-      price: "52px",
-      oldPrice: "30px",
-      discount: "26px",
-      desc: "30px",
-      info: "26px",
-      button: "30px",
-    }
-  }
-
-  return config
 }

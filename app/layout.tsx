@@ -7,8 +7,8 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Sales Martins - Shopee Affiliate TikTok Generator",
-  description: "Automated system for generating TikTok videos from Shopee top-selling products",
+  title: "SENTINNELL AutoSeller - Gerador Automático de Posts para TikTok",
+  description: "Sistema automatizado para geração de posts para TikTok a partir de produtos mais vendidos da Shopee",
     generator: 'v0.dev'
 }
 

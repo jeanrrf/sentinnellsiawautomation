@@ -24,7 +24,6 @@ try {
     exists: async () => 0,
     scard: async () => 0,
     keys: async () => [],
-    info: async () => "Redis mock client",
   } as unknown as Redis
 }
 

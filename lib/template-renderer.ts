@@ -1,10 +1,10 @@
-export function renderProductCardTemplate(product: any, description: string) {
+export function renderProductCardTemplate(product: any, description: string, style = "portrait") {
   if (!product) {
     console.error("Product is undefined or null in renderProductCardTemplate")
     throw new Error("Product is required to render template")
   }
 
-  console.log("Rendering template for product:", product.itemId)
+  console.log(`Rendering template for product: ${product.itemId} with style: ${style}`)
 
   // Usar o preço original calculado ou o preço atual se não houver desconto
   const currentPrice = Number.parseFloat(product.price)
@@ -19,15 +19,19 @@ export function renderProductCardTemplate(product: any, description: string) {
     discountPercentage = Math.round(Number.parseFloat(product.priceDiscountRate))
   }
 
+  // Configurações de estilo baseadas no formato escolhido
+  const styleConfig = getStyleConfig(style)
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Card Produto TikTok</title>
   <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
   <style>
-    /* estilo da página */
+    /* Reset e configurações básicas */
     * {
       box-sizing: border-box;
       margin: 0;
@@ -36,189 +40,44 @@ export function renderProductCardTemplate(product: any, description: string) {
     }
 
     body {
-      width: 1080px;
-      height: 1920px;
+      width: ${styleConfig.width};
+      height: ${styleConfig.height};
       background: #0f0f0f;
       overflow: hidden;
       position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      padding: 5% 0;
-    }
-
-    .logo-area {
-      position: absolute;
-      top: 40px;
-      left: 40px;
-      width: 320px;
-      height: 80px;
-      display: flex;
       justify-content: center;
-      z-index: 2;
     }
 
-    .logo-animada {
-      width: 100%;
-      height: 100%;
-    }
-
-    .logo-bg {
+    /* Background animado */
+    .background {
       position: absolute;
+      top: 0;
+      left: 0;
       width: 100%;
       height: 100%;
       background: linear-gradient(45deg, #6a00f4, #00e0ff, #6a00f4);
       background-size: 400% 400%;
-      animation: pulseGradient 8s ease infinite;
+      animation: gradientBG 8s ease infinite;
       opacity: 0.15;
       z-index: 0;
     }
 
-    @keyframes pulseGradient {
-      0% {
-        background-position: 0% 50%;
-      }
-
-      50% {
-        background-position: 100% 50%;
-      }
-
-      100% {
-        background-position: 0% 50%;
-      }
+    @keyframes gradientBG {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
     }
 
-    .card {
-      position: relative;
-      width: 90%;
-      max-width: 900px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 30px;
-      z-index: 1;
-      background: rgba(15, 15, 15, 0.7);
-      backdrop-filter: blur(10px);
-      border-radius: 25px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-      margin-top: 120px;
-    }
-
-    .product-img {
-      width: 100%;
-      max-height: 50vh;
-      object-fit: cover;
-      border-radius: 20px;
-      margin: 20px auto;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    }
-
-    .title {
-      font-size: 48px;
-      line-height: 1.2;
-      text-align: center;
-      margin-bottom: 20px;
-      color: #ffffff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-      padding: 0 20px;
-    }
-
-    .price-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 20px 0;
-      flex-wrap: wrap;
-      gap: 15px;
-    }
-
-    .price {
-      font-size: 64px;
-      color: #ff0055;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .old-price {
-      font-size: 36px;
-      color: #cccccc;
-      text-decoration: line-through;
-      opacity: 0.7;
-    }
-
-    .discount {
-      background: #ff0055;
-      color: white;
-      font-size: 32px;
-      padding: 8px 15px;
-      border-radius: 50%;
-      margin-left: 15px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-    }
-
-    .desc {
-      font-size: 36px;
-      color: #cccccc;
-      margin: 20px 0 40px;
-      text-align: center;
-      white-space: pre-line;
-    }
-
-    .rating {
-      font-size: 36px;
-      margin: 10px 0;
-      color: #cccccc;
-    }
-
-    .rating span {
-      color: #ffd700;
-    }
-
-    .offer-link {
-      display: inline-block;
-      margin-top: 40px;
-      padding: 25px 50px;
-      background: linear-gradient(80deg, #c21244, #15e4ffb1);
-      color: #ffffff;
-      border-radius: 30px;
-      text-decoration: none;
-      font-size: 36px;
-      text-align: center;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .offer-link:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-    }
-
-    .info-container {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      width: 100%;
-    }
-  </style>
-  <style>
-    @keyframes salesmartins-gradient {
-      0% {
-        background-position: 0% 50%;
-      }
-
-      50% {
-        background-position: 100% 50%;
-      }
-
-      100% {
-        background-position: 0% 50%;
-      }
-    }
-
-    .salesmartins-logo-animated {
-      font-family: 'Bruno Ace SC', sans-serif;
-      font-size: 3.5rem;
+    /* Logo */
+    .logo {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 10;
+      font-size: 2.5rem;
       font-weight: 700;
       background: linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a);
       background-size: 300% 300%;
@@ -226,38 +85,228 @@ export function renderProductCardTemplate(product: any, description: string) {
       -webkit-background-clip: text;
       color: transparent;
       -webkit-text-fill-color: transparent;
-      animation: salesmartins-gradient 5s ease infinite;
-      text-align: center;
+      animation: logoGradient 5s ease infinite;
       filter: drop-shadow(0 2px 12px #b155ff88);
-      border-radius: 18px;
-      padding: 0 12px;
+    }
+
+    @keyframes logoGradient {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+
+    /* Card principal */
+    .card {
+      position: relative;
+      width: ${styleConfig.cardWidth};
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: ${styleConfig.cardPadding};
+      z-index: 1;
+      background: rgba(15, 15, 15, 0.8);
+      backdrop-filter: blur(10px);
+      border-radius: 25px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Imagem do produto */
+    .product-image-container {
+      width: 100%;
+      height: ${styleConfig.imageHeight};
+      margin: 15px 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+      border-radius: 15px;
+    }
+
+    .product-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Título do produto */
+    .product-title {
+      font-size: ${styleConfig.fontSize.title};
+      line-height: 1.2;
+      text-align: center;
+      margin-bottom: 15px;
+      color: #ffffff;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+      padding: 0 10px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Preço */
+    .price-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 15px 0;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .current-price {
+      font-size: ${styleConfig.fontSize.price};
+      color: #ff0055;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .original-price {
+      font-size: ${styleConfig.fontSize.oldPrice};
+      color: #cccccc;
+      text-decoration: line-through;
+      opacity: 0.7;
+    }
+
+    .discount-badge {
+      background: #ff0055;
+      color: white;
+      font-size: ${styleConfig.fontSize.discount};
+      padding: 8px 15px;
+      border-radius: 50%;
+      margin-left: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Descrição */
+    .product-description {
+      font-size: ${styleConfig.fontSize.desc};
+      color: #cccccc;
+      margin: 15px 0;
+      text-align: center;
+      white-space: pre-line;
+      max-height: ${styleConfig.descriptionHeight};
+      overflow-y: auto;
+      padding: 0 10px;
+    }
+
+    /* Informações adicionais */
+    .product-info {
+      font-size: ${styleConfig.fontSize.info};
+      margin: 10px 0;
+      color: #cccccc;
+    }
+
+    .star-rating {
+      color: #ffd700;
+    }
+
+    /* Botão de compra */
+    .buy-button {
       display: inline-block;
-      white-space: nowrap;
+      margin-top: 20px;
+      padding: 15px 40px;
+      background: linear-gradient(80deg, #c21244, #15e4ffb1);
+      color: #ffffff;
+      border-radius: 30px;
+      text-decoration: none;
+      font-size: ${styleConfig.fontSize.button};
+      text-align: center;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      transition: transform 0.3s, box-shadow 0.3s;
+    }
+
+    .buy-button:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
     }
   </style>
 </head>
 
 <body>
-  <div class="logo-bg"></div>
-  <div class="logo-area">
-    <div class="logo-animada">
-      <span class="salesmartins-logo-animated">Sales Martins</span>
-    </div>
-  </div>
+  <div class="background"></div>
+  <div class="logo">Sales Martins</div>
+  
   <div class="card">
-    <h1 class="title">${product.productName}</h1>
-    <img src="${product.imageUrl}" alt="${product.productName}" class="product-img" />
-    <div class="info-container">
-      <div class="price-container">
-        <p class="price">R$ ${currentPrice.toFixed(2)}</p>
-        ${originalPrice ? `<p class="old-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
-        ${discountPercentage ? `<span class="discount">-${discountPercentage}%</span>` : ""}
-      </div>
-      <p class="desc">${description}</p>
-      <p class="rating">Avaliação: <span>${product.ratingStar || "4.5"}</span> | Vendas: ${product.sales}+</p>
-      <a class="offer-link" href="${product.offerLink}" target="_blank">COMPRAR AGORA</a>
+    <h1 class="product-title">${product.productName}</h1>
+    
+    <div class="product-image-container">
+      <img src="${product.imageUrl}" alt="${product.productName}" class="product-image" />
     </div>
+    
+    <div class="price-container">
+      <p class="current-price">R$ ${currentPrice.toFixed(2)}</p>
+      ${originalPrice ? `<p class="original-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
+      ${discountPercentage ? `<span class="discount-badge">-${discountPercentage}%</span>` : ""}
+    </div>
+    
+    <p class="product-description">${description}</p>
+    
+    <p class="product-info">
+      <span class="star-rating">★★★★★</span> ${product.ratingStar || "4.5"} | Vendas: ${product.sales}+
+    </p>
+    
+    <a href="${product.offerLink}" target="_blank" class="buy-button">COMPRAR AGORA</a>
   </div>
 </body>
 </html>`
+}
+
+// Função para obter configurações de estilo baseadas no formato escolhido
+function getStyleConfig(style: string) {
+  // Configurações padrão (retrato)
+  const config = {
+    width: "1080px",
+    height: "1920px",
+    cardWidth: "90%",
+    cardPadding: "30px",
+    imageHeight: "500px",
+    descriptionHeight: "200px",
+    fontSize: {
+      title: "42px",
+      price: "56px",
+      oldPrice: "32px",
+      discount: "28px",
+      desc: "32px",
+      info: "28px",
+      button: "32px",
+    },
+  }
+
+  // Ajustar configurações com base no estilo
+  if (style === "square") {
+    config.width = "1080px"
+    config.height = "1080px"
+    config.imageHeight = "400px"
+    config.descriptionHeight = "150px"
+    config.fontSize = {
+      title: "36px",
+      price: "48px",
+      oldPrice: "28px",
+      discount: "24px",
+      desc: "28px",
+      info: "24px",
+      button: "28px",
+    }
+  } else if (style === "landscape") {
+    config.width = "1920px"
+    config.height = "1080px"
+    config.cardWidth = "80%"
+    config.cardPadding = "25px"
+    config.imageHeight = "450px"
+    config.descriptionHeight = "120px"
+    config.fontSize = {
+      title: "40px",
+      price: "52px",
+      oldPrice: "30px",
+      discount: "26px",
+      desc: "30px",
+      info: "26px",
+      button: "30px",
+    }
+  }
+
+  return config
 }
