@@ -8,11 +8,7 @@ export default function Home() {
     <div className="container mx-auto px-4 py-6">
       <div className="flex flex-col items-center justify-center min-h-[80vh]">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">AutoSeller</h1>
-          <p className="text-xl text-muted-foreground">Gerador Automático de Posts para TikTok</p>
-          <div className="mt-6">
-            <AnimatedLogo />
-          </div>
+          <AnimatedLogo />
         </div>
 
         <Card className="w-full max-w-md">

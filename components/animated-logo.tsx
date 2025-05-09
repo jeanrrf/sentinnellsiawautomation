@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useRef } from "react"
+import Link from "next/link"
 
 export function AnimatedLogo() {
   const logoRef = useRef<HTMLDivElement>(null)
@@ -37,5 +38,9 @@ export function AnimatedLogo() {
     }
   }, [])
 
-  return <div ref={logoRef} className="flex justify-center"></div>
+  return (
+    <Link href="/">
+      <div ref={logoRef} className="flex justify-center cursor-pointer"></div>
+    </Link>
+  )
 }

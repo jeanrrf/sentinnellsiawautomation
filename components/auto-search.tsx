@@ -31,14 +31,14 @@ export function AutoSearch() {
       const response = await fetch("/api/cache/status")
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch cache status: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao buscar status do cache: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
       setCacheStatus(data)
     } catch (err: any) {
-      setError(err.message || "Failed to fetch cache status")
-      console.error("Error fetching cache status:", err)
+      setError(err.message || "Falha ao buscar status do cache")
+      console.error("Erro ao buscar status do cache:", err)
       // Set default empty cache status
       setCacheStatus({ stats: { info: {}, keys: {} }, timestamp: new Date().toISOString() })
     } finally {
@@ -54,14 +54,14 @@ export function AutoSearch() {
       const response = await fetch("/api/products")
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao buscar produtos: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
       setProducts(data.products || [])
     } catch (err: any) {
-      setError(err.message || "Failed to fetch products")
-      console.error("Error fetching products:", err)
+      setError(err.message || "Falha ao buscar produtos")
+      console.error("Erro ao buscar produtos:", err)
     } finally {
       setIsLoading(false)
     }
@@ -85,7 +85,7 @@ export function AutoSearch() {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch products from Shopee: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao buscar produtos da Shopee: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
@@ -95,11 +95,11 @@ export function AutoSearch() {
         await fetchCacheStatus()
         setError(null)
       } else {
-        throw new Error(data.message || "Failed to fetch products from Shopee")
+        throw new Error(data.message || "Falha ao buscar produtos da Shopee")
       }
     } catch (err: any) {
-      setError(err.message || "Failed to fetch products from Shopee")
-      console.error("Error fetching products from Shopee:", err)
+      setError(err.message || "Falha ao buscar produtos da Shopee")
+      console.error("Erro ao buscar produtos da Shopee:", err)
     } finally {
       setIsFetching(false)
     }
@@ -115,13 +115,13 @@ export function AutoSearch() {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to clean up cache: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao limpar cache: ${response.status} ${response.statusText}`)
       }
 
       await fetchCacheStatus()
     } catch (err: any) {
-      setError(err.message || "Failed to clean up cache")
-      console.error("Error cleaning up cache:", err)
+      setError(err.message || "Falha ao limpar cache")
+      console.error("Erro ao limpar cache:", err)
     } finally {
       setIsCleaning(false)
     }
@@ -137,7 +137,7 @@ export function AutoSearch() {
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Error</AlertTitle>
+          <AlertTitle>Erro</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}

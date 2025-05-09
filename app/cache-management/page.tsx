@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw, Trash2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Header } from "@/components/header"
+import { AnimatedLogo } from "@/components/animated-logo"
 
 export default function CacheManagementPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -62,9 +62,9 @@ export default function CacheManagementPage() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <Header />
-
-      <h1 className="text-3xl font-bold mb-6">Cache Management</h1>
+      <div className="flex justify-between items-center mb-6">
+        <AnimatedLogo />
+      </div>
 
       {error && (
         <Alert variant="destructive" className="mb-6">

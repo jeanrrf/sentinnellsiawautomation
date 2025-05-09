@@ -1,41 +1,29 @@
 "use client"
 
-import { useState } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { usePathname } from "next/navigation"
 import { AutoSearch } from "@/components/auto-search"
 import { DesignerExport } from "@/components/designer-export"
 import { ScheduleAutomation } from "@/components/schedule-automation"
 import { CacheViewer } from "@/components/cache-viewer"
 
 export function Dashboard() {
-  const [activeTab, setActiveTab] = useState("auto-search")
+  const pathname = usePathname()
 
-  return (
-    <div className="container mx-auto px-4 py-6">
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="auto-search">Auto Search</TabsTrigger>
-          <TabsTrigger value="designer">Designer & Export</TabsTrigger>
-          <TabsTrigger value="automation">Schedule/Automation</TabsTrigger>
-          <TabsTrigger value="cache">Cache Viewer</TabsTrigger>
-        </TabsList>
+  // Determinar qual componente mostrar com base na rota atual
+  const renderContent = () => {
+    if (pathname.includes("/dashboard/busca") || pathname === "/dashboard") {
+      return <AutoSearch />
+    } else if (pathname.includes("/dashboard/designer")) {
+      return <DesignerExport />
+    } else if (pathname.includes("/dashboard/automacao")) {
+      return <ScheduleAutomation />
+    } else if (pathname.includes("/dashboard/publicacao")) {
+      return <CacheViewer />
+    } else {
+      // Configurações ou outra página
+      return <div>Configurações</div>
+    }
+  }
 
-        <TabsContent value="auto-search" className="w-full overflow-x-auto">
-          <AutoSearch />
-        </TabsContent>
-
-        <TabsContent value="designer" className="w-full">
-          <DesignerExport />
-        </TabsContent>
-
-        <TabsContent value="automation">
-          <ScheduleAutomation />
-        </TabsContent>
-
-        <TabsContent value="cache">
-          <CacheViewer />
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
+  return <div className="container mx-auto px-4 py-6">{renderContent()}</div>
 }

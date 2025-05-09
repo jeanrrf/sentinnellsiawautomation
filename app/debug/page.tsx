@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, RefreshCw } from "lucide-react"
+import { AnimatedLogo } from "@/components/animated-logo"
 
 export default function DebugPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -30,7 +31,9 @@ export default function DebugPage() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <h1 className="text-3xl font-bold mb-6">Debug da API da Shopee</h1>
+      <div className="flex justify-between items-center mb-6">
+        <AnimatedLogo />
+      </div>
 
       <Card className="mb-6">
         <CardHeader>

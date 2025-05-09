@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AnimatedLogo } from "@/components/animated-logo"
 
 export default function DiagnosticsPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -66,7 +67,9 @@ export default function DiagnosticsPage() {
 
   return (
     <div className="container mx-auto px-4 py-6">
-      <h1 className="text-3xl font-bold mb-6">System Diagnostics</h1>
+      <div className="flex justify-between items-center mb-6">
+        <AnimatedLogo />
+      </div>
 
       {error && (
         <Alert variant="destructive" className="mb-6">

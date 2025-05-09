@@ -29,14 +29,14 @@ export function CacheViewer() {
       const response = await fetch("/api/videos")
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch videos: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao buscar vídeos: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
       setVideos(data.videos || [])
     } catch (err: any) {
-      setError(err.message || "Failed to fetch videos")
-      console.error("Error fetching videos:", err)
+      setError(err.message || "Falha ao buscar vídeos")
+      console.error("Erro ao buscar vídeos:", err)
     } finally {
       setIsLoading(false)
     }
@@ -51,7 +51,7 @@ export function CacheViewer() {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to delete video: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao excluir vídeo: ${response.status} ${response.statusText}`)
       }
 
       toast({
@@ -62,8 +62,8 @@ export function CacheViewer() {
       // Refresh videos list
       fetchVideos()
     } catch (err: any) {
-      setError(err.message || "Failed to delete video")
-      console.error("Error deleting video:", err)
+      setError(err.message || "Falha ao excluir vídeo")
+      console.error("Erro ao excluir vídeo:", err)
       toast({
         variant: "destructive",
         title: "Erro",
@@ -81,7 +81,7 @@ export function CacheViewer() {
       })
 
       if (!response.ok) {
-        throw new Error(`Failed to publish video: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao publicar vídeo: ${response.status} ${response.statusText}`)
       }
 
       toast({
@@ -92,8 +92,8 @@ export function CacheViewer() {
       // Refresh videos list
       fetchVideos()
     } catch (err: any) {
-      setError(err.message || "Failed to publish video")
-      console.error("Error publishing video:", err)
+      setError(err.message || "Falha ao publicar vídeo")
+      console.error("Erro ao publicar vídeo:", err)
       toast({
         variant: "destructive",
         title: "Erro",
@@ -106,7 +106,7 @@ export function CacheViewer() {
     try {
       window.open(`/api/videos/${id}/download`, "_blank")
     } catch (err: any) {
-      console.error("Error downloading video:", err)
+      console.error("Erro ao baixar vídeo:", err)
       toast({
         variant: "destructive",
         title: "Erro",
@@ -205,9 +205,7 @@ export function CacheViewer() {
               ) : (
                 <div className="text-center py-8">
                   <p className="text-muted-foreground">Nenhum vídeo encontrado</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    Gere vídeos na aba Designer & Export para vê-los aqui
-                  </p>
+                  <p className="text-sm text-muted-foreground mt-2">Gere vídeos na aba Designer para vê-los aqui</p>
                 </div>
               )}
             </CardContent>

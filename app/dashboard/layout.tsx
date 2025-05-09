@@ -2,6 +2,7 @@ import type React from "react"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
 import { ModeToggle } from "@/components/mode-toggle"
+import { AnimatedLogo } from "@/components/animated-logo"
 
 export default function DashboardLayout({
   children,
@@ -11,28 +12,26 @@ export default function DashboardLayout({
   return (
     <div className="container mx-auto p-4">
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">AutoSeller</h1>
-        </div>
+        <AnimatedLogo />
         <ModeToggle />
       </div>
 
-      <Tabs defaultValue="auto-search" className="w-full">
+      <Tabs defaultValue="busca" className="w-full">
         <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="auto-search" asChild>
-            <Link href="/dashboard/auto-search">Busca</Link>
+          <TabsTrigger value="busca" asChild>
+            <Link href="/dashboard/busca">Busca</Link>
           </TabsTrigger>
           <TabsTrigger value="designer" asChild>
             <Link href="/dashboard/designer">Designer</Link>
           </TabsTrigger>
-          <TabsTrigger value="automation" asChild>
-            <Link href="/dashboard/automation">Automação</Link>
+          <TabsTrigger value="automacao" asChild>
+            <Link href="/dashboard/automacao">Automação</Link>
           </TabsTrigger>
-          <TabsTrigger value="cache" asChild>
-            <Link href="/dashboard/cache">Publicação</Link>
+          <TabsTrigger value="publicacao" asChild>
+            <Link href="/dashboard/publicacao">Publicação</Link>
           </TabsTrigger>
-          <TabsTrigger value="settings" asChild>
-            <Link href="/dashboard/settings">Configurações</Link>
+          <TabsTrigger value="configuracoes" asChild>
+            <Link href="/dashboard/configuracoes">Configurações</Link>
           </TabsTrigger>
         </TabsList>
       </Tabs>
