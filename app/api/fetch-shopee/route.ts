@@ -1,90 +1,140 @@
 import { NextResponse } from "next/server"
+import crypto from "crypto"
 import { cacheProducts } from "@/lib/redis"
 
-export async function GET() {
-  try {
-    console.log("Buscando produtos da API Shopee Affiliate...")
+// Shopee API credentials from environment variables
+const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID
+const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET
+const SHOPEE_AFFILIATE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL
 
-    // Verificar se as variáveis de ambiente necessárias estão configuradas
-    if (!process.env.SHOPEE_APP_ID || !process.env.SHOPEE_APP_SECRET) {
+function generateSignature(appId: string, timestamp: number, payload: string, secret: string) {
+  const baseString = `${appId}${timestamp}${payload}${secret}`
+  return crypto.createHash("sha256").update(baseString).digest("hex")
+}
+
+export async function POST() {
+  try {
+    if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET || !SHOPEE_AFFILIATE_API_URL) {
       return NextResponse.json(
         {
           success: false,
-          message: "Credenciais da API Shopee não configuradas",
+          message: "Missing Shopee API credentials. Please check your environment variables.",
         },
         { status: 500 },
       )
     }
 
-    // Construir a URL da API com os parâmetros necessários
-    const apiUrl = process.env.SHOPEE_AFFILIATE_API_URL || "https://open-api.affiliate.shopee.com.br"
-    const endpoint = "/api/v1/product/get_list"
+    const timestamp = Math.floor(Date.now() / 1000)
 
-    const params = new URLSearchParams({
-      offset: "0",
-      limit: "5", // Limitado a 5 produtos
-      sort_by: "sales", // Ordenar por vendas (best sellers)
-      sort_type: "desc", // Ordem decrescente
-      time_range: "2", // Últimas 48 horas
-    })
+    const query = `
+      query GetBestSellers($page: Int!, $limit: Int!, $sortType: Int) {
+        productOfferV2(page: $page, limit: $limit, sortType: $sortType) {
+          nodes {
+            itemId
+            productName
+            commissionRate
+            price
+            priceDiscountRate
+            priceMin
+            priceMax
+            sales
+            imageUrl
+            shopName
+            offerLink
+            ratingStar
+          }
+        }
+      }
+    `
 
-    const url = `${apiUrl}${endpoint}?${params.toString()}`
+    // Limitando para 5 produtos e usando sortType 2 para best sellers
+    const variables = { page: 1, limit: 5, sortType: 2 }
+    const payload = JSON.stringify({ query, variables })
 
-    // Configurar headers da requisição
+    const signature = generateSignature(SHOPEE_APP_ID, timestamp, payload, SHOPEE_APP_SECRET)
+
     const headers = {
+      Authorization: `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.SHOPEE_APP_ID}:${process.env.SHOPEE_APP_SECRET}`,
     }
 
-    // Fazer a requisição para a API
-    const response = await fetch(url, { headers })
+    console.log("Fetching from Shopee API with URL:", SHOPEE_AFFILIATE_API_URL)
+
+    const response = await fetch(SHOPEE_AFFILIATE_API_URL, {
+      method: "POST",
+      headers,
+      body: payload,
+    })
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error("Erro na resposta da API Shopee:", errorText)
+      console.error("Shopee API error response:", errorText)
+
       return NextResponse.json(
         {
           success: false,
-          message: `Erro na API Shopee: ${response.status} ${response.statusText}`,
+          message: `Shopee API error: ${response.status} ${response.statusText}`,
+          details: errorText,
         },
         { status: response.status },
       )
     }
 
     const data = await response.json()
+    console.log("Shopee API response:", JSON.stringify(data).substring(0, 200) + "...")
 
-    // Verificar se a resposta contém produtos
-    if (!data.products || !Array.isArray(data.products)) {
-      console.error("Resposta da API Shopee não contém produtos:", data)
+    const products = data?.data?.productOfferV2?.nodes || []
+
+    if (!products || products.length === 0) {
       return NextResponse.json(
         {
           success: false,
-          message: "Resposta da API Shopee não contém produtos",
-          data,
+          message: "No products returned from Shopee API",
+          apiResponse: data,
         },
-        { status: 500 },
+        { status: 404 },
       )
     }
 
-    // Filtrar apenas os 5 melhores produtos
-    const bestSellers = data.products.slice(0, 5)
+    // Calcular o preço original com base na taxa de desconto
+    const processedProducts = products.map((product) => {
+      const price = Number.parseFloat(product.price)
+      const discountRate = Number.parseFloat(product.priceDiscountRate) / 100 // Convertendo para decimal
 
-    console.log(`Encontrados ${bestSellers.length} produtos best sellers`)
+      // Se tiver taxa de desconto, calcular o preço original
+      let originalPrice = null
+      if (discountRate > 0) {
+        // Fórmula: preço_atual = preço_original * (1 - taxa_desconto)
+        // Portanto: preço_original = preço_atual / (1 - taxa_desconto)
+        originalPrice = (price / (1 - discountRate)).toFixed(2)
+      }
 
-    // Salvar produtos no cache
-    await cacheProducts(bestSellers)
+      return {
+        ...product,
+        calculatedOriginalPrice: originalPrice,
+      }
+    })
+
+    // Cache the products
+    try {
+      await cacheProducts(processedProducts)
+      console.log(`Cached ${processedProducts.length} products from Shopee API`)
+    } catch (cacheError) {
+      console.error("Error caching products from Shopee API:", cacheError)
+    }
 
     return NextResponse.json({
       success: true,
-      products: bestSellers,
-      source: "api",
+      products: processedProducts,
+      cached: true,
+      timestamp: new Date().toISOString(),
     })
-  } catch (error) {
-    console.error("Erro ao buscar produtos da API Shopee:", error)
+  } catch (error: any) {
+    console.error("Error fetching from Shopee API:", error)
     return NextResponse.json(
       {
         success: false,
-        message: `Erro ao buscar produtos: ${error.message}`,
+        message: `Failed to fetch from Shopee API: ${error.message}`,
       },
       { status: 500 },
     )

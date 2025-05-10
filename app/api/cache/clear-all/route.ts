@@ -24,7 +24,7 @@ export async function POST() {
       success: true,
       message: "Cache limpo com sucesso",
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro ao limpar cache:", error)
     return NextResponse.json(
       {
