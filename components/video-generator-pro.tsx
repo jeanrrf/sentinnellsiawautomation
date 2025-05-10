@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -12,7 +12,18 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 import { ProductSelector } from "@/components/product-selector"
-import { Loader2, Video, Download, Play, AlertCircle } from "lucide-react"
+import {
+  Loader2,
+  Video,
+  Download,
+  Play,
+  AlertCircle,
+  Settings,
+  Sliders,
+  RefreshCw,
+  CheckCircle,
+  Share2,
+} from "lucide-react"
 
 interface VideoGeneratorProProps {
   products: any[]
@@ -25,14 +36,39 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
   const [videoDuration, setVideoDuration] = useState(10)
   const [videoStyle, setVideoStyle] = useState("portrait")
+  const [videoQuality, setVideoQuality] = useState("medium")
   const [withAudio, setWithAudio] = useState(false)
+  const [optimize, setOptimize] = useState(true)
+  const [fps, setFps] = useState(30)
   const [generationStep, setGenerationStep] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("basic")
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [generationHistory, setGenerationHistory] = useState<any[]>([])
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const { toast } = useToast()
 
   // Encontrar o produto selecionado para exibir informações
   const selectedProductInfo = products.find((p) => p.itemId === selectedProduct)
+
+  // Carregar histórico de geração do localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("videoGenerationHistory")
+    if (savedHistory) {
+      try {
+        setGenerationHistory(JSON.parse(savedHistory))
+      } catch (e) {
+        console.error("Erro ao carregar histórico:", e)
+      }
+    }
+  }, [])
+
+  // Salvar histórico no localStorage quando atualizado
+  useEffect(() => {
+    if (generationHistory.length > 0) {
+      localStorage.setItem("videoGenerationHistory", JSON.stringify(generationHistory))
+    }
+  }, [generationHistory])
 
   const handleGenerateVideo = async () => {
     if (!selectedProduct) {
@@ -73,7 +109,10 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
           productId: selectedProduct,
           duration: videoDuration,
           style: videoStyle,
+          quality: videoQuality,
           withAudio,
+          optimize,
+          fps,
         }),
       })
 
@@ -92,6 +131,19 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       // Atualizar progresso para 100%
       setProgress(100)
       setGenerationStep("Vídeo gerado com sucesso!")
+
+      // Adicionar ao histórico
+      const newHistoryItem = {
+        id: Date.now(),
+        productId: selectedProduct,
+        productName: selectedProductInfo?.productName || "Produto",
+        timestamp: new Date().toISOString(),
+        duration: videoDuration,
+        style: videoStyle,
+        quality: videoQuality,
+      }
+
+      setGenerationHistory((prev) => [newHistoryItem, ...prev.slice(0, 9)]) // Manter apenas os 10 mais recentes
 
       toast({
         title: "Vídeo gerado com sucesso",
@@ -123,6 +175,65 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
     document.body.removeChild(a)
   }
 
+  const handleShareVideo = async () => {
+    if (!videoUrl) return
+
+    try {
+      // Verificar se a API de compartilhamento está disponível
+      if (navigator.share) {
+        const blob = await fetch(videoUrl).then((r) => r.blob())
+        const file = new File([blob], `produto-${selectedProduct}.mp4`, { type: "video/mp4" })
+
+        await navigator.share({
+          title: `Vídeo do produto ${selectedProductInfo?.productName || ""}`,
+          text: "Confira este produto incrível!",
+          files: [file],
+        })
+
+        toast({
+          title: "Vídeo compartilhado",
+          description: "O vídeo foi compartilhado com sucesso",
+        })
+      } else {
+        // Fallback se a API de compartilhamento não estiver disponível
+        handleDownloadVideo()
+        toast({
+          title: "Compartilhamento não suportado",
+          description: "Seu navegador não suporta compartilhamento direto. O vídeo foi baixado.",
+        })
+      }
+    } catch (error) {
+      console.error("Erro ao compartilhar:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao compartilhar",
+        description: "Não foi possível compartilhar o vídeo",
+      })
+    }
+  }
+
+  const loadHistoryItem = (item: any) => {
+    // Encontrar o produto pelo ID
+    const product = products.find((p) => p.itemId === item.productId)
+    if (product) {
+      setSelectedProduct(item.productId)
+      setVideoDuration(item.duration)
+      setVideoStyle(item.style)
+      setVideoQuality(item.quality || "medium")
+
+      toast({
+        title: "Configurações carregadas",
+        description: `Configurações para "${product.productName}" carregadas`,
+      })
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Produto não encontrado",
+        description: "O produto deste histórico não está mais disponível",
+      })
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
       <Card>
@@ -131,64 +242,114 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
           <CardDescription>Crie vídeos em MP4 para TikTok a partir de produtos da Shopee</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="product">Selecione o Produto</Label>
-            <ProductSelector products={products} value={selectedProduct} onChange={setSelectedProduct} />
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="grid grid-cols-2 mb-4">
+              <TabsTrigger value="basic">Configurações Básicas</TabsTrigger>
+              <TabsTrigger value="advanced">Configurações Avançadas</TabsTrigger>
+            </TabsList>
 
-            {selectedProductInfo && (
-              <div className="mt-2 p-3 bg-muted rounded-md">
-                <p className="font-medium text-sm">Produto selecionado:</p>
-                <p className="text-sm truncate">{selectedProductInfo.productName}</p>
-                <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-                  <span>Preço: R$ {selectedProductInfo.price}</span>
-                  <span>Vendas: {selectedProductInfo.sales}</span>
+            <TabsContent value="basic" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="product">Selecione o Produto</Label>
+                <ProductSelector products={products} value={selectedProduct} onChange={setSelectedProduct} />
+
+                {selectedProductInfo && (
+                  <div className="mt-2 p-3 bg-muted rounded-md">
+                    <p className="font-medium text-sm">Produto selecionado:</p>
+                    <p className="text-sm truncate">{selectedProductInfo.productName}</p>
+                    <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                      <span>Preço: R$ {selectedProductInfo.price}</span>
+                      <span>Vendas: {selectedProductInfo.sales}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="videoStyle">Estilo do Vídeo</Label>
+                <Select value={videoStyle} onValueChange={setVideoStyle}>
+                  <SelectTrigger id="videoStyle">
+                    <SelectValue placeholder="Selecione o estilo do vídeo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="portrait">Retrato (9:16) - Ideal para TikTok</SelectItem>
+                    <SelectItem value="square">Quadrado (1:1) - Instagram</SelectItem>
+                    <SelectItem value="landscape">Paisagem (16:9) - YouTube</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="videoDuration">Duração do Vídeo: {videoDuration} segundos</Label>
+                </div>
+                <Slider
+                  id="videoDuration"
+                  min={5}
+                  max={15}
+                  step={1}
+                  value={[videoDuration]}
+                  onValueChange={(value) => setVideoDuration(value[0])}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>5s</span>
+                  <span>10s</span>
+                  <span>15s</span>
                 </div>
               </div>
-            )}
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="videoStyle">Estilo do Vídeo</Label>
-            <Select value={videoStyle} onValueChange={setVideoStyle}>
-              <SelectTrigger id="videoStyle">
-                <SelectValue placeholder="Selecione o estilo do vídeo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="portrait">Retrato (9:16) - Ideal para TikTok</SelectItem>
-                <SelectItem value="square">Quadrado (1:1) - Instagram</SelectItem>
-                <SelectItem value="landscape">Paisagem (16:9) - YouTube</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="withAudio">Incluir Áudio (Música de Fundo)</Label>
+                <Switch id="withAudio" checked={withAudio} onCheckedChange={setWithAudio} />
+              </div>
 
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="videoDuration">Duração do Vídeo: {videoDuration} segundos</Label>
-            </div>
-            <Slider
-              id="videoDuration"
-              min={5}
-              max={15}
-              step={1}
-              value={[videoDuration]}
-              onValueChange={(value) => setVideoDuration(value[0])}
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>5s</span>
-              <span>10s</span>
-              <span>15s</span>
-            </div>
-          </div>
+              <Button variant="outline" size="sm" className="w-full" onClick={() => setShowAdvanced(!showAdvanced)}>
+                <Settings className="mr-2 h-4 w-4" />
+                {showAdvanced ? "Ocultar Configurações Avançadas" : "Mostrar Configurações Avançadas"}
+              </Button>
+            </TabsContent>
 
-          <div className="flex items-center justify-between">
-            <Label htmlFor="withAudio">Incluir Áudio (Música de Fundo)</Label>
-            <Switch
-              id="withAudio"
-              checked={withAudio}
-              onCheckedChange={setWithAudio}
-              disabled={true} // Desabilitado por enquanto
-            />
-          </div>
+            <TabsContent value="advanced" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="videoQuality">Qualidade do Vídeo</Label>
+                <Select value={videoQuality} onValueChange={setVideoQuality}>
+                  <SelectTrigger id="videoQuality">
+                    <SelectValue placeholder="Selecione a qualidade do vídeo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Baixa (arquivo menor)</SelectItem>
+                    <SelectItem value="medium">Média (recomendado)</SelectItem>
+                    <SelectItem value="high">Alta (arquivo maior)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="fps">Taxa de Quadros (FPS): {fps}</Label>
+                </div>
+                <Slider id="fps" min={24} max={60} step={1} value={[fps]} onValueChange={(value) => setFps(value[0])} />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>24 fps</span>
+                  <span>30 fps</span>
+                  <span>60 fps</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label htmlFor="optimize">Otimizar para Redes Sociais</Label>
+                <Switch id="optimize" checked={optimize} onCheckedChange={setOptimize} />
+              </div>
+
+              <Alert variant="info" className="mt-4">
+                <Sliders className="h-4 w-4" />
+                <AlertDescription>
+                  Configurações avançadas afetam a qualidade e o tamanho do arquivo final. Para a maioria dos casos, as
+                  configurações padrão são recomendadas.
+                </AlertDescription>
+              </Alert>
+            </TabsContent>
+          </Tabs>
 
           {isGenerating && (
             <div className="space-y-2 mt-4">
@@ -232,8 +393,9 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         </CardHeader>
         <CardContent className="p-0">
           <Tabs defaultValue="preview" className="w-full">
-            <TabsList className="w-full">
+            <TabsList className="w-full grid grid-cols-3">
               <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="history">Histórico</TabsTrigger>
               <TabsTrigger value="info">Informações</TabsTrigger>
             </TabsList>
 
@@ -260,6 +422,10 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                       <Download className="mr-2 h-4 w-4" />
                       Baixar MP4
                     </Button>
+                    <Button variant="secondary" className="flex-1" onClick={handleShareVideo}>
+                      <Share2 className="mr-2 h-4 w-4" />
+                      Compartilhar
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -268,6 +434,60 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                   <p className="text-muted-foreground text-center">Gere um vídeo para visualizá-lo aqui</p>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="history" className="p-4">
+              <div className="space-y-4">
+                <h3 className="font-medium">Histórico de Geração</h3>
+
+                {generationHistory.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <RefreshCw className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>Nenhum histórico de geração encontrado</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {generationHistory.map((item) => (
+                      <div key={item.id} className="border rounded-md p-3 hover:bg-muted/50 transition-colors">
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <p className="font-medium truncate">{item.productName}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(item.timestamp).toLocaleString()}</p>
+                          </div>
+                          <Button variant="ghost" size="sm" onClick={() => loadHistoryItem(item)}>
+                            <RefreshCw className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <div className="flex gap-2 mt-2 text-xs">
+                          <span className="bg-muted px-2 py-1 rounded">{item.duration}s</span>
+                          <span className="bg-muted px-2 py-1 rounded">
+                            {item.style === "portrait" ? "9:16" : item.style === "square" ? "1:1" : "16:9"}
+                          </span>
+                          <span className="bg-muted px-2 py-1 rounded capitalize">{item.quality || "medium"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {generationHistory.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full mt-2"
+                    onClick={() => {
+                      localStorage.removeItem("videoGenerationHistory")
+                      setGenerationHistory([])
+                      toast({
+                        title: "Histórico limpo",
+                        description: "O histórico de geração foi limpo com sucesso",
+                      })
+                    }}
+                  >
+                    Limpar Histórico
+                  </Button>
+                )}
+              </div>
             </TabsContent>
 
             <TabsContent value="info" className="p-4">
@@ -285,7 +505,7 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                   <ol className="text-sm text-muted-foreground space-y-1 list-decimal list-inside">
                     <li>Renderização do card HTML em alta resolução</li>
                     <li>Conversão para vídeo MP4 com efeitos de transição</li>
-                    <li>Adição de áudio (opcional, em breve)</li>
+                    <li>Adição de áudio (opcional)</li>
                     <li>Otimização para plataformas sociais</li>
                   </ol>
                 </div>
@@ -295,9 +515,21 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                   <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
                     <li>Use o formato retrato (9:16) para TikTok e Reels</li>
                     <li>Duração recomendada: 7-10 segundos</li>
+                    <li>Adicione áudio para maior engajamento</li>
                     <li>Baixe o vídeo e faça upload diretamente no TikTok</li>
                     <li>Adicione hashtags relevantes na descrição do TikTok</li>
                   </ul>
+                </div>
+
+                <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-md">
+                  <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-medium mb-1">
+                    <CheckCircle className="h-4 w-4" />
+                    <span>Compatibilidade</span>
+                  </div>
+                  <p className="text-sm text-green-600 dark:text-green-500">
+                    Os vídeos gerados são compatíveis com TikTok, Instagram Reels, YouTube Shorts e outras plataformas
+                    de vídeo.
+                  </p>
                 </div>
               </div>
             </TabsContent>

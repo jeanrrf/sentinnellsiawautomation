@@ -1,25 +1,42 @@
 import { NextResponse } from "next/server"
 import fs from "fs"
 import { renderHtmlToImage } from "@/lib/puppeteer-renderer"
-import { convertImageToVideo } from "@/lib/ffmpeg-converter"
+import { convertImageToVideo, optimizeVideoForSocialMedia } from "@/lib/ffmpeg-converter"
 import { getCachedProduct, createCacheEntry, getCacheEntry } from "@/lib/redis"
+import path from "path"
 
 // Definir o timeout máximo para 60 segundos (máximo da Vercel)
 export const maxDuration = 60
 
 export async function POST(req: Request) {
   try {
-    // Extrair o ID do produto do corpo da requisição
-    const { productId, duration = 10, style = "portrait" } = await req.json()
+    // Extrair parâmetros do corpo da requisição
+    const {
+      productId,
+      duration = 10,
+      style = "portrait",
+      quality = "medium",
+      withAudio = false,
+      optimize = true,
+      fps = 30,
+    } = await req.json()
 
     if (!productId) {
       return NextResponse.json({ success: false, message: "ID do produto é obrigatório" }, { status: 400 })
     }
 
-    console.log(`Gerando vídeo para o produto ${productId} com duração de ${duration}s e estilo ${style}`)
+    console.log(`Gerando vídeo para o produto ${productId}:`)
+    console.log(`- Duração: ${duration}s`)
+    console.log(`- Estilo: ${style}`)
+    console.log(`- Qualidade: ${quality}`)
+    console.log(`- Com áudio: ${withAudio}`)
+    console.log(`- Otimizar: ${optimize}`)
+    console.log(`- FPS: ${fps}`)
 
-    // Verificar se já temos um vídeo gerado para este produto
-    const cacheKey = `video:${productId}:${style}:${duration}`
+    // Criar chave de cache única baseada em todos os parâmetros
+    const cacheKey = `video:${productId}:${style}:${duration}:${quality}:${withAudio}:${optimize}:${fps}`
+
+    // Verificar se já temos um vídeo gerado para estes parâmetros
     const cachedVideo = await getCacheEntry(cacheKey)
 
     if (cachedVideo && cachedVideo.videoPath && fs.existsSync(cachedVideo.videoPath)) {
@@ -74,17 +91,26 @@ export async function POST(req: Request) {
     console.log("Imagem renderizada, iniciando conversão para vídeo...")
 
     // Converter a imagem em vídeo usando FFmpeg
-    const videoPath = await convertImageToVideo(imagePath, {
+    let videoPath = await convertImageToVideo(imagePath, {
       duration: Number(duration),
       fadeIn: 0.5,
       fadeOut: 0.5,
-      audioPath: null, // Sem áudio por enquanto
+      audioPath: withAudio ? path.join(process.cwd(), "public", "audio", "background.mp3") : null,
+      resolution: style as any,
+      quality: quality as any,
+      fps,
     })
+
+    // Se solicitado, otimizar o vídeo para redes sociais
+    if (optimize) {
+      console.log("Otimizando vídeo para redes sociais...")
+      videoPath = await optimizeVideoForSocialMedia(videoPath)
+    }
 
     console.log("Vídeo gerado com sucesso, preparando resposta...")
 
     // Salvar o caminho do vídeo no cache
-    await createCacheEntry(cacheKey, { videoPath })
+    await createCacheEntry(cacheKey, { videoPath }, 60 * 60 * 24) // 24 horas de TTL
 
     // Ler o arquivo de vídeo
     const videoBuffer = fs.readFileSync(videoPath)
