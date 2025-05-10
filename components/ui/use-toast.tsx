@@ -6,6 +6,10 @@ import { createContext, useContext, useState } from "react"
 import { Toast, ToastAction, ToastClose, ToastDescription, ToastTitle, ToastViewport } from "@/components/ui/toast"
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 
+// Armazenamento global simples para funções de toast
+let globalToast: ((props: ToastProps) => string) | null = null
+let globalDismiss: ((id?: string) => void) | null = null
+
 type ToastContextType = {
   toast: (props: ToastProps) => string
   dismiss: (id?: string) => void
@@ -47,6 +51,17 @@ export function ToastProvider({ children }: ToastProviderProps) {
     }
   }, [])
 
+  // Atualizar as variáveis globais
+  React.useEffect(() => {
+    globalToast = toast
+    globalDismiss = dismiss
+
+    return () => {
+      globalToast = null
+      globalDismiss = null
+    }
+  }, [toast, dismiss])
+
   return (
     <ToastContext.Provider value={{ toast, dismiss }}>
       {children}
@@ -73,41 +88,48 @@ export function useToast() {
   return context
 }
 
-// Função toast para uso fora de componentes React
-let toastFn: (props: ToastProps) => string = () => {
-  console.warn("Toast function called before it was initialized")
-  return ""
+// Função toast simples para uso fora de componentes React
+function toastFunction(props: ToastProps): string {
+  if (!globalToast) {
+    console.warn("Toast function called before ToastProvider was initialized")
+    return ""
+  }
+  return globalToast(props)
 }
 
-let dismissFn: (id?: string) => void = () => {
-  console.warn("Dismiss function called before it was initialized")
+// Função dismiss simples
+function dismissFunction(id?: string): void {
+  if (!globalDismiss) {
+    console.warn("Dismiss function called before ToastProvider was initialized")
+    return
+  }
+  globalDismiss(id)
 }
 
-// Atualizar as funções globais quando o ToastProvider for montado
-if (typeof window !== "undefined") {
-  // Sobrescrever useToast para capturar as funções
-  const originalUseToast = useToast
-
-  Object.defineProperty(module.exports, "useToast", {
-    get: () => {
-      return function useToastWrapper() {
-        const context = originalUseToast()
-        toastFn = context.toast
-        dismissFn = context.dismiss
-        return context
-      }
-    },
-  })
+// Funções auxiliares
+function successFunction(props: Omit<ToastProps, "variant">): string {
+  return toastFunction({ ...props, variant: "success" })
 }
 
-// Função toast para uso fora de componentes React
-export const toast = Object.assign((props: ToastProps) => toastFn(props), {
-  dismiss: (id?: string) => dismissFn(id),
-  success: (props: Omit<ToastProps, "variant">) => toastFn({ ...props, variant: "success" }),
-  error: (props: Omit<ToastProps, "variant">) => toastFn({ ...props, variant: "destructive" }),
-  warning: (props: Omit<ToastProps, "variant">) => toastFn({ ...props, variant: "warning" }),
-  info: (props: Omit<ToastProps, "variant">) => toastFn({ ...props, variant: "info" }),
-})
+function errorFunction(props: Omit<ToastProps, "variant">): string {
+  return toastFunction({ ...props, variant: "destructive" })
+}
+
+function warningFunction(props: Omit<ToastProps, "variant">): string {
+  return toastFunction({ ...props, variant: "warning" })
+}
+
+function infoFunction(props: Omit<ToastProps, "variant">): string {
+  return toastFunction({ ...props, variant: "info" })
+}
+
+// Exportar funções individuais em vez de usar Object.assign
+export const toast = toastFunction
+export const dismiss = dismissFunction
+export const success = successFunction
+export const error = errorFunction
+export const warning = warningFunction
+export const info = infoFunction
 
 export type { ToastProps, ToastActionElement }
 export { ToastAction, ToastClose, ToastDescription, ToastTitle, ToastViewport }
