@@ -447,7 +447,17 @@ export function DesignerExport() {
             <Label htmlFor="product" className="text-sm">
               Selecione o Produto
             </Label>
-            <ProductSelector products={products} value={selectedProduct} onChange={setSelectedProduct} />
+            <ProductSelector
+              products={products}
+              value={selectedProduct}
+              onChange={(value) => {
+                setSelectedProduct(value)
+                // Clear any previous errors when selecting a new product
+                setError("")
+              }}
+              disabled={isGenerating}
+              placeholder="Selecione um produto para gerar o card"
+            />
 
             {selectedProduct && products.find((p) => p.itemId === selectedProduct) && (
               <div className="mt-1 p-2 bg-muted rounded-md">

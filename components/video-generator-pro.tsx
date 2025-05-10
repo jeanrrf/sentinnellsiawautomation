@@ -727,7 +727,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
 
             <TabsContent value="basic" className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="product">Selecione o Produto</Label>
+                <Label htmlFor="product-selector">Selecione o Produto</Label>
                 <ProductSelector
                   products={safeProducts}
                   value={selectedProduct}
@@ -793,6 +793,10 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                     })
                     setVideoDuration(value[0])
                   }}
+                  aria-valuemin={5}
+                  aria-valuemax={15}
+                  aria-valuenow={videoDuration}
+                  aria-valuetext={`${videoDuration} segundos`}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>5s</span>
@@ -812,6 +816,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                     })
                     setWithAudio(checked)
                   }}
+                  aria-label="Incluir áudio"
                 />
               </div>
 
@@ -825,9 +830,10 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                   })
                   setShowAdvanced(!showAdvanced)
                 }}
+                aria-expanded={showAdvanced}
               >
                 <Settings className="mr-2 h-4 w-4" />
-                {showAdvanced ? "Ocultar Configurações Avançadas" : "Mostrar Configurações Avançadas"}
+                <span>{showAdvanced ? "Ocultar Configurações Avançadas" : "Mostrar Configurações Avançadas"}</span>
               </Button>
             </TabsContent>
 
@@ -870,6 +876,10 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                     })
                     setFps(value[0])
                   }}
+                  aria-valuemin={24}
+                  aria-valuemax={60}
+                  aria-valuenow={fps}
+                  aria-valuetext={`${fps} FPS`}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>24 fps</span>
@@ -889,6 +899,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                     })
                     setOptimize(checked)
                   }}
+                  aria-label="Otimizar para redes sociais"
                 />
               </div>
 
@@ -908,7 +919,14 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                 <span>{generationStep}</span>
                 <span>{progress}%</span>
               </div>
-              <Progress value={progress} className="h-2" />
+              <Progress
+                value={progress}
+                className="h-2"
+                aria-label="Progresso da geração de vídeo"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              />
             </div>
           )}
 
@@ -925,12 +943,12 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
             {isGenerating ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Gerando Vídeo...
+                <span>Gerando Vídeo...</span>
               </>
             ) : (
               <>
                 <Video className="mr-2 h-4 w-4" />
-                Gerar Vídeo MP4
+                <span>Gerar Vídeo MP4</span>
               </>
             )}
           </Button>
@@ -942,17 +960,17 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
             {isExporting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Gerando vídeo...
+                <span>Gerando vídeo...</span>
               </>
             ) : isUploading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Enviando para o Blob Storage...
+                <span>Enviando para o Blob Storage...</span>
               </>
             ) : (
               <>
                 <Video className="mr-2 h-4 w-4" />
-                Exportar vídeo MP4
+                <span>Exportar vídeo MP4</span>
               </>
             )}
           </Button>
@@ -983,21 +1001,32 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                       controls
                       autoPlay
                       loop
+                      aria-label="Preview do vídeo gerado"
                     />
                   </div>
 
                   <div className="flex gap-2 mt-4 w-full max-w-md">
-                    <Button variant="outline" className="flex-1" onClick={() => videoRef.current?.play()}>
+                    <Button
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => videoRef.current?.play()}
+                      aria-label="Reproduzir vídeo"
+                    >
                       <Play className="mr-2 h-4 w-4" />
-                      Reproduzir
+                      <span>Reproduzir</span>
                     </Button>
-                    <Button className="flex-1" onClick={handleDownloadVideo}>
+                    <Button className="flex-1" onClick={handleDownloadVideo} aria-label="Baixar vídeo MP4">
                       <Download className="mr-2 h-4 w-4" />
-                      Baixar MP4
+                      <span>Baixar MP4</span>
                     </Button>
-                    <Button variant="secondary" className="flex-1" onClick={handleShareVideo}>
+                    <Button
+                      variant="secondary"
+                      className="flex-1"
+                      onClick={handleShareVideo}
+                      aria-label="Compartilhar vídeo"
+                    >
                       <Share2 className="mr-2 h-4 w-4" />
-                      Compartilhar
+                      <span>Compartilhar</span>
                     </Button>
                   </div>
                 </div>
@@ -1027,8 +1056,14 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                             <p className="font-medium truncate">{item.productName}</p>
                             <p className="text-xs text-muted-foreground">{new Date(item.timestamp).toLocaleString()}</p>
                           </div>
-                          <Button variant="ghost" size="sm" onClick={() => loadHistoryItem(item)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => loadHistoryItem(item)}
+                            aria-label={`Carregar configurações para ${item.productName}`}
+                          >
                             <RefreshCw className="h-4 w-4" />
+                            <span className="sr-only">Carregar configurações</span>
                           </Button>
                         </div>
                         <div className="flex gap-2 mt-2 text-xs">
@@ -1057,8 +1092,9 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                         description: "O histórico de geração foi limpo com sucesso",
                       })
                     }}
+                    aria-label="Limpar histórico de geração"
                   >
-                    Limpar Histórico
+                    <span>Limpar Histórico</span>
                   </Button>
                 )}
               </div>

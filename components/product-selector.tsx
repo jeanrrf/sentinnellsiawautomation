@@ -1,137 +1,123 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Check, ChevronsUpDown, AlertCircle, Loader2 } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { Check, ChevronsUpDown, AlertCircle, Loader2, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createLogger, ErrorCodes } from "@/lib/logger"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 
-// Criar logger específico para este componente
+// Create a module-specific logger
 const logger = createLogger("ProductSelector")
 
-interface ProductSelectorProps {
-  products: any[]
-  value: string
-  onChange: (value: string) => void
+export interface Product {
+  itemId: string
+  productName: string
+  price: string | number
+  sales: number
+  imageUrl?: string
 }
 
-export function ProductSelector({ products, value, onChange }: ProductSelectorProps) {
-  // Log component initialization
-  logger.debug("Component initializing", {
-    context: { productsCount: products?.length || 0 },
-  })
+interface ProductSelectorProps {
+  products: Product[]
+  value: string
+  onChange: (value: string) => void
+  disabled?: boolean
+  placeholder?: string
+  className?: string
+  showAlert?: boolean
+}
 
+export function ProductSelector({
+  products,
+  value,
+  onChange,
+  disabled = false,
+  placeholder = "Selecione um produto",
+  className,
+  showAlert = true,
+}: ProductSelectorProps) {
+  // Component state
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredProducts, setFilteredProducts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [localProducts, setLocalProducts] = useState<any[]>([])
+  const [localProducts, setLocalProducts] = useState<Product[]>([])
   const [showProductNotFoundAlert, setShowProductNotFoundAlert] = useState(false)
+  const [hasInitialized, setHasInitialized] = useState(false)
 
-  // Inicializar produtos locais quando os produtos externos mudarem
+  // Unique ID for accessibility
+  const selectorId = useMemo(() => `product-selector-${Math.random().toString(36).substring(2, 9)}`, [])
+
+  // Initialize local products when external products change
   useEffect(() => {
-    if (products && Array.isArray(products) && products.length > 0) {
+    if (Array.isArray(products) && products.length > 0) {
       logger.debug("Initializing local products from props", {
         context: { count: products.length },
       })
-
       setLocalProducts(products)
-      setFilteredProducts(products)
+      setHasInitialized(true)
     }
   }, [products])
 
-  // Filtrar produtos quando o termo de pesquisa mudar
+  // Validate selected product exists in the product list
   useEffect(() => {
-    if (!searchTerm) {
-      setFilteredProducts(localProducts || [])
-      return
+    if (hasInitialized && value && Array.isArray(localProducts) && localProducts.length > 0) {
+      const productExists = localProducts.some((product) => product.itemId === value)
+
+      if (!productExists) {
+        logger.warning("Selected product not found in product list", {
+          context: { selectedProductId: value },
+        })
+
+        if (showAlert) {
+          setShowProductNotFoundAlert(true)
+        }
+      } else {
+        setShowProductNotFoundAlert(false)
+      }
     }
+  }, [value, localProducts, hasInitialized, showAlert])
 
-    logger.debug("Filtering products by search term", {
-      context: {
-        searchTerm,
-        totalProducts: localProducts?.length || 0,
-      },
-    })
-
-    // Garantir que localProducts é um array antes de filtrar
-    if (!Array.isArray(localProducts)) {
-      setFilteredProducts([])
-      return
-    }
-
-    const lowerSearchTerm = searchTerm.toLowerCase()
-    const filtered = localProducts.filter(
-      (product) =>
-        product.productName?.toLowerCase().includes(lowerSearchTerm) ||
-        product.itemId?.toString().includes(lowerSearchTerm),
-    )
-
-    setFilteredProducts(filtered)
-
-    logger.debug("Products filtered", {
-      context: {
-        filteredCount: filtered.length,
-        totalCount: localProducts.length,
-      },
-    })
-  }, [searchTerm, localProducts])
-
-  // Buscar produtos se não houver nenhum
+  // Fetch products if none are available
   useEffect(() => {
-    if ((localProducts?.length === 0 || !localProducts) && !isLoading) {
+    const shouldFetchProducts =
+      (hasInitialized && !Array.isArray(localProducts)) || (Array.isArray(localProducts) && localProducts.length === 0)
+
+    if (shouldFetchProducts && !isLoading) {
       logger.info("No local products available, fetching from API")
 
       const fetchProducts = async () => {
         setIsLoading(true)
         try {
-          logger.debug("Sending API request to fetch products")
-
           const response = await fetch("/api/products")
 
           if (!response.ok) {
-            logger.error("Products API request failed", {
-              code: ErrorCodes.API.REQUEST_FAILED,
-              context: {
-                status: response.status,
-                statusText: response.statusText,
-              },
-            })
             throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
           }
 
           const data = await response.json()
 
           if (data.products && Array.isArray(data.products)) {
-            logger.info("Products fetched successfully from API", {
+            logger.info("Products fetched successfully", {
               context: { count: data.products.length },
             })
-
             setLocalProducts(data.products)
-            setFilteredProducts(data.products)
           } else {
             logger.warning("API returned invalid products data", {
               code: ErrorCodes.API.RESPONSE_INVALID,
-              context: {
-                responseType: typeof data.products,
-                isArray: Array.isArray(data.products),
-              },
             })
-            // Inicializar com array vazio para evitar erros
             setLocalProducts([])
-            setFilteredProducts([])
           }
         } catch (error) {
           logger.error("Error fetching products", {
             code: ErrorCodes.API.REQUEST_FAILED,
             details: error,
           })
-          // Inicializar com array vazio para evitar erros
           setLocalProducts([])
-          setFilteredProducts([])
         } finally {
           setIsLoading(false)
         }
@@ -139,113 +125,177 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
 
       fetchProducts()
     }
-  }, [localProducts, isLoading])
+  }, [localProducts, isLoading, hasInitialized])
 
-  // Encontrar o produto selecionado
-  const selectedProduct = Array.isArray(localProducts)
-    ? localProducts.find((product) => product.itemId === value)
-    : null
+  // Filter products based on search term
+  const filteredProducts = useMemo(() => {
+    if (!Array.isArray(localProducts)) {
+      return []
+    }
 
-  // Log component render
-  logger.debug("Component rendering", {
-    context: {
-      selectedProduct: selectedProduct?.itemId || "none",
-      isOpen: open,
-      filteredProductsCount: filteredProducts?.length || 0,
-    },
-  })
+    if (!searchTerm) {
+      return localProducts
+    }
+
+    const lowerSearchTerm = searchTerm.toLowerCase()
+    return localProducts.filter(
+      (product) =>
+        product.productName?.toLowerCase().includes(lowerSearchTerm) ||
+        product.itemId?.toString().includes(lowerSearchTerm),
+    )
+  }, [localProducts, searchTerm])
+
+  // Find the selected product
+  const selectedProduct = useMemo(() => {
+    if (!Array.isArray(localProducts) || !value) {
+      return null
+    }
+    return localProducts.find((product) => product.itemId === value)
+  }, [localProducts, value])
+
+  // Handle product selection
+  const handleSelectProduct = (productId: string) => {
+    const newValue = productId === value ? "" : productId
+    logger.info("Product selection changed", {
+      context: {
+        previousValue: value,
+        newValue,
+      },
+    })
+    onChange(newValue)
+    setOpen(false)
+    setShowProductNotFoundAlert(false)
+  }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-2", className)}>
       {showProductNotFoundAlert && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="mb-2 py-2">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            O produto selecionado anteriormente não está mais disponível. Por favor, selecione outro produto.
+          <AlertDescription className="text-sm">
+            O produto selecionado não está mais disponível. Por favor, selecione outro produto.
           </AlertDescription>
         </Alert>
       )}
 
-      <Popover
-        open={open}
-        onOpenChange={(newOpen) => {
-          logger.debug("Popover state changed", {
-            context: { previousState: open, newState: newOpen },
-          })
-          setOpen(newOpen)
-        }}
-      >
+      <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className={cn("w-full justify-between", value ? "text-foreground" : "text-muted-foreground")}
-            aria-label="Selecione um produto"
+            aria-controls={`${selectorId}-dropdown`}
+            className={cn(
+              "w-full justify-between transition-all",
+              selectedProduct ? "text-foreground" : "text-muted-foreground",
+              disabled && "opacity-50 cursor-not-allowed",
+            )}
+            disabled={disabled}
+            id={selectorId}
+            data-testid="product-selector-button"
           >
             {isLoading ? (
-              <div className="flex items-center">
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Carregando produtos...</span>
               </div>
-            ) : value && selectedProduct ? (
-              <div className="flex items-center">
-                <span className="truncate max-w-[300px]">{selectedProduct.productName}</span>
+            ) : selectedProduct ? (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-2 truncate">
+                  {selectedProduct.imageUrl && (
+                    <div className="w-6 h-6 rounded overflow-hidden flex-shrink-0">
+                      <img
+                        src={selectedProduct.imageUrl || "/placeholder.svg"}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          ;(e.target as HTMLImageElement).style.display = "none"
+                        }}
+                      />
+                    </div>
+                  )}
+                  <span className="truncate">{selectedProduct.productName}</span>
+                </div>
+                <Badge variant="outline" className="ml-2 flex-shrink-0">
+                  R$ {selectedProduct.price}
+                </Badge>
               </div>
             ) : (
-              "Selecione um produto"
+              <span>{placeholder}</span>
             )}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <Command>
-            <CommandInput
-              placeholder="Buscar produto..."
-              value={searchTerm}
-              onValueChange={(newValue) => {
-                logger.debug("Search term changed", {
-                  context: { previousTerm: searchTerm, newTerm: newValue },
-                })
-                setSearchTerm(newValue)
-              }}
-              aria-label="Buscar produto"
-            />
-            <CommandList>
-              <CommandEmpty>
-                {logger.debug("No products found for search term", {
-                  context: { searchTerm },
-                }) && null}
-                Nenhum produto encontrado.
-              </CommandEmpty>
-              <CommandGroup heading="Produtos">
-                {Array.isArray(filteredProducts) &&
-                  filteredProducts.map((product) => (
+
+        <PopoverContent className="w-full p-0" align="start" id={`${selectorId}-dropdown`} side="bottom" sideOffset={4}>
+          <Command className="w-full" shouldFilter={false}>
+            <div className="flex items-center border-b px-3 py-2">
+              <Search className="h-4 w-4 mr-2 opacity-50 flex-shrink-0" />
+              <CommandInput
+                placeholder="Buscar produto..."
+                value={searchTerm}
+                onValueChange={setSearchTerm}
+                className="flex-1 outline-none border-0 focus:ring-0 focus-visible:ring-0 p-0"
+              />
+            </div>
+
+            <CommandList className="max-h-[300px] overflow-auto">
+              {isLoading ? (
+                <div className="p-2 space-y-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-2 p-2">
+                      <Skeleton className="h-10 w-10 rounded-md" />
+                      <div className="space-y-1 flex-1">
+                        <Skeleton className="h-4 w-full" />
+                        <Skeleton className="h-3 w-1/2" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : filteredProducts.length === 0 ? (
+                <CommandEmpty className="py-6 text-center text-sm">
+                  {searchTerm ? (
+                    <>
+                      Nenhum produto encontrado para <strong>"{searchTerm}"</strong>
+                    </>
+                  ) : (
+                    "Nenhum produto disponível"
+                  )}
+                </CommandEmpty>
+              ) : (
+                <CommandGroup heading="Produtos">
+                  {filteredProducts.map((product) => (
                     <CommandItem
                       key={product.itemId}
                       value={product.itemId}
-                      onSelect={(currentValue) => {
-                        logger.info("Product selected", {
-                          context: {
-                            productId: currentValue,
-                            productName: product.productName,
-                          },
-                        })
-                        onChange(currentValue === value ? "" : currentValue)
-                        setOpen(false)
-                        setShowProductNotFoundAlert(false)
-                      }}
+                      onSelect={() => handleSelectProduct(product.itemId)}
+                      className="flex items-center gap-2 py-3 px-2 cursor-pointer"
+                      data-selected={value === product.itemId ? "true" : "false"}
                     >
-                      <Check className={cn("mr-2 h-4 w-4", value === product.itemId ? "opacity-100" : "opacity-0")} />
-                      <div className="flex flex-col">
-                        <span className="truncate max-w-[300px]">{product.productName}</span>
-                        <span className="text-xs text-muted-foreground">
-                          ID: {product.itemId} | R$ {product.price} | Vendas: {product.sales}
-                        </span>
+                      <div
+                        className={cn(
+                          "flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+                          value === product.itemId ? "bg-primary text-primary-foreground" : "bg-muted",
+                        )}
+                      >
+                        {value === product.itemId && <Check className="h-3 w-3" />}
+                      </div>
+
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="font-medium truncate">{product.productName}</span>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>ID: {product.itemId}</span>
+                          <span className="flex items-center gap-2">
+                            <span>R$ {product.price}</span>
+                            <span>•</span>
+                            <span>Vendas: {product.sales}</span>
+                          </span>
+                        </div>
                       </div>
                     </CommandItem>
                   ))}
-              </CommandGroup>
+                </CommandGroup>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>

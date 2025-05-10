@@ -228,35 +228,49 @@ export function ScheduleAutomation() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="date">Data</Label>
+              <Label htmlFor="schedule-date">Data</Label>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button
+                    id="schedule-date"
                     variant={"outline"}
                     className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
+                    aria-label="Selecione uma data"
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {date ? format(date, "PPP") : <span>Selecione uma data</span>}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-auto p-0">
-                  <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
+                  <Calendar
+                    mode="single"
+                    selected={date}
+                    onSelect={setDate}
+                    initialFocus
+                    aria-label="Calendário para seleção de data"
+                  />
                 </PopoverContent>
               </Popover>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="time">Horário</Label>
+              <Label htmlFor="schedule-time">Horário</Label>
               <div className="flex items-center">
                 <Clock className="mr-2 h-4 w-4 text-muted-foreground" />
-                <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} />
+                <Input
+                  id="schedule-time"
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                  aria-label="Selecione o horário"
+                />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="frequency">Frequência</Label>
+              <Label htmlFor="schedule-frequency">Frequência</Label>
               <Select value={frequency} onValueChange={setFrequency}>
-                <SelectTrigger>
+                <SelectTrigger id="schedule-frequency" aria-label="Selecione a frequência">
                   <SelectValue placeholder="Selecione a frequência" />
                 </SelectTrigger>
                 <SelectContent>
@@ -272,16 +286,17 @@ export function ScheduleAutomation() {
               onClick={handleAddSchedule}
               disabled={!date || isSubmitting || apiStatus === "error"}
               className="w-full"
+              aria-label="Adicionar agendamento"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Criando...
+                  <span>Criando...</span>
                 </>
               ) : (
                 <>
                   <Plus className="mr-2 h-4 w-4" />
-                  Adicionar Agendamento
+                  <span>Adicionar Agendamento</span>
                 </>
               )}
             </Button>
@@ -299,7 +314,12 @@ export function ScheduleAutomation() {
                 <Label htmlFor="auto-publish">Publicação Automática</Label>
                 <p className="text-sm text-muted-foreground">Publicar automaticamente os vídeos gerados no TikTok</p>
               </div>
-              <Switch id="auto-publish" checked={autoPublish} onCheckedChange={setAutoPublish} />
+              <Switch
+                id="auto-publish"
+                checked={autoPublish}
+                onCheckedChange={setAutoPublish}
+                aria-label="Ativar publicação automática"
+              />
             </div>
 
             <div className="pt-4">
@@ -317,16 +337,17 @@ export function ScheduleAutomation() {
               variant={isRunning ? "destructive" : "default"}
               className="w-full"
               disabled={apiStatus === "error"}
+              aria-label={isRunning ? "Pausar automação" : "Iniciar automação"}
             >
               {isRunning ? (
                 <>
                   <Pause className="mr-2 h-4 w-4" />
-                  Pausar Automação
+                  <span>Pausar Automação</span>
                 </>
               ) : (
                 <>
                   <Play className="mr-2 h-4 w-4" />
-                  Iniciar Automação
+                  <span>Iniciar Automação</span>
                 </>
               )}
             </Button>
@@ -437,8 +458,16 @@ export function ScheduleAutomation() {
                         size="sm"
                         onClick={() => handleDeleteSchedule(schedule.id)}
                         disabled={isDeleting}
+                        aria-label={`Excluir agendamento de ${schedule.date}`}
                       >
-                        {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        {isDeleting ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <>
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Excluir agendamento</span>
+                          </>
+                        )}
                       </Button>
                     </TableCell>
                   </TableRow>
