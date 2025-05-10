@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server"
 import { isIdProcessed, addProcessedId, getCachedDescription } from "@/lib/redis"
 import { renderProductCardTemplate } from "@/lib/template-renderer"
+import { ErrorType, createAppError, handleError } from "@/lib/error-handling"
 
 export async function POST(req: Request) {
   try {
     const { productId, useAI, customDescription, videoStyle } = await req.json()
 
     if (!productId) {
-      return NextResponse.json({ success: false, message: "Product ID is required" }, { status: 400 })
+      const error = createAppError(ErrorType.VALIDATION, "ID do produto é obrigatório", { code: "MISSING_PRODUCT_ID" })
+
+      return NextResponse.json({ success: false, message: error.message, error }, { status: 400 })
     }
 
     console.log(`Generating video for product ID: ${productId}, useAI: ${useAI}, style: ${videoStyle}`)
@@ -18,7 +21,12 @@ export async function POST(req: Request) {
       processed = await isIdProcessed(productId)
       console.log(`Product ${productId} processed status:`, processed)
     } catch (error) {
-      console.error("Error checking if ID is processed:", error)
+      // Usar nosso sistema de tratamento de erros
+      handleError(error, {
+        context: "generate-video",
+        operation: "check-processed-id",
+        productId,
+      })
       // Continue even if this check fails
     }
 
@@ -29,21 +37,44 @@ export async function POST(req: Request) {
       const productsResponse = await fetch(new URL("/api/products", req.url).toString())
 
       if (!productsResponse.ok) {
-        throw new Error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
+        throw createAppError(
+          ErrorType.API_RESPONSE,
+          `Falha ao buscar produtos: ${productsResponse.status} ${productsResponse.statusText}`,
+          {
+            code: productsResponse.status.toString(),
+            details: { status: productsResponse.status, statusText: productsResponse.statusText },
+          },
+        )
       }
 
       const productsData = await productsResponse.json()
       product = productsData.products.find((p: any) => p.itemId === productId)
 
       if (!product) {
-        throw new Error("Product not found in the products list")
+        throw createAppError(ErrorType.VALIDATION, "Produto não encontrado na lista de produtos", {
+          code: "PRODUCT_NOT_FOUND",
+          details: { productId },
+        })
       }
     } catch (error) {
-      console.error("Error fetching product:", error)
+      const appError = error.type
+        ? error
+        : createAppError(ErrorType.API_REQUEST, `Falha ao buscar produto: ${error.message}`, {
+            originalError: error,
+            details: { productId },
+          })
+
+      handleError(appError, {
+        context: "generate-video",
+        operation: "fetch-product",
+        productId,
+      })
+
       return NextResponse.json(
         {
           success: false,
-          message: `Failed to fetch product: ${error.message}`,
+          message: appError.message,
+          error: appError,
         },
         { status: 500 },
       )
@@ -66,7 +97,11 @@ export async function POST(req: Request) {
             console.log("Using cached description for product:", productId)
           }
         } catch (cacheError) {
-          console.error("Error getting cached description:", cacheError)
+          handleError(cacheError, {
+            context: "generate-video",
+            operation: "get-cached-description",
+            productId,
+          })
         }
 
         // If no cached description, try to generate one
@@ -81,7 +116,10 @@ export async function POST(req: Request) {
             })
 
             if (!descResponse.ok) {
-              throw new Error(`Failed to generate description: ${descResponse.status}`)
+              throw createAppError(ErrorType.API_RESPONSE, `Falha ao gerar descrição: ${descResponse.status}`, {
+                code: descResponse.status.toString(),
+                details: { status: descResponse.status, statusText: descResponse.statusText },
+              })
             }
 
             const descData = await descResponse.json()
@@ -90,17 +128,27 @@ export async function POST(req: Request) {
               descriptionSource = descData.source || "api"
               console.log("Generated description:", description)
             } else {
-              throw new Error(descData.message || "Failed to generate description")
+              throw createAppError(ErrorType.API_RESPONSE, descData.message || "Falha ao gerar descrição", {
+                details: descData,
+              })
             }
           } catch (error) {
-            console.error("Error generating description:", error)
+            handleError(error, {
+              context: "generate-video",
+              operation: "generate-description",
+              productId,
+            })
             // Fallback description
             description = createFallbackDescription(product)
             descriptionSource = "fallback"
           }
         }
       } catch (error) {
-        console.error("Error with description handling:", error)
+        handleError(error, {
+          context: "generate-video",
+          operation: "description-handling",
+          productId,
+        })
         // Fallback description if all else fails
         description = createFallbackDescription(product)
         descriptionSource = "fallback"
@@ -121,7 +169,11 @@ export async function POST(req: Request) {
     try {
       await addProcessedId(productId)
     } catch (error) {
-      console.error("Error marking product as processed:", error)
+      handleError(error, {
+        context: "generate-video",
+        operation: "mark-processed",
+        productId,
+      })
       // Continue even if this fails
     }
 
@@ -137,11 +189,22 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: any) {
-    console.error("Error generating video:", error)
+    const appError = error.type
+      ? error
+      : createAppError(ErrorType.UNEXPECTED, `Falha ao gerar vídeo: ${error.message}`, {
+          originalError: error,
+        })
+
+    handleError(appError, {
+      context: "generate-video",
+      operation: "main",
+    })
+
     return NextResponse.json(
       {
         success: false,
-        message: `Failed to generate video: ${error.message}`,
+        message: appError.message,
+        error: appError,
       },
       { status: 500 },
     )

@@ -1,4 +1,3 @@
-import chromium from "chrome-aws-lambda"
 import puppeteer from "puppeteer-core"
 import fs from "fs"
 import path from "path"
@@ -8,25 +7,24 @@ import { tmpdir } from "os"
 export async function getBrowser() {
   // Verifica se estamos em ambiente de desenvolvimento ou produção
   const isDev = process.env.NODE_ENV === "development"
+  const executablePath = process.env.CHROME_EXECUTABLE_PATH || (isDev ? undefined : "/tmp/chromium/chromium")
 
-  if (isDev) {
-    // Em desenvolvimento, usa o Chrome local
-    return puppeteer.launch({
-      args: chromium.args,
-      headless: true,
-      defaultViewport: { width: 1080, height: 1920 },
-      ignoreHTTPSErrors: true,
-    })
-  } else {
-    // Em produção (Vercel), usa o Chrome AWS Lambda
-    return puppeteer.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath,
-      headless: chromium.headless,
-      defaultViewport: { width: 1080, height: 1920 },
-      ignoreHTTPSErrors: true,
-    })
-  }
+  return puppeteer.launch({
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-gpu",
+    ],
+    executablePath,
+    headless: true,
+    defaultViewport: { width: 1080, height: 1920 },
+    ignoreHTTPSErrors: true,
+  })
 }
 
 // Função para renderizar o HTML como imagem

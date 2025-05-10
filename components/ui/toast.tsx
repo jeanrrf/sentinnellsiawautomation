@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import { Cross2Icon } from "@radix-ui/react-icons"
 import * as ToastPrimitives from "@radix-ui/react-toast"
@@ -28,9 +30,9 @@ const toastVariants = cva(
       variant: {
         default: "border bg-background text-foreground",
         destructive: "destructive group border-destructive bg-destructive text-destructive-foreground",
-        success: "border-green-500 bg-green-500 text-white",
-        warning: "border-yellow-500 bg-yellow-500 text-white",
-        info: "border-blue-500 bg-blue-500 text-white",
+        success: "border-green-500 bg-green-500 text-white dark:border-green-600 dark:bg-green-600",
+        warning: "border-yellow-500 bg-yellow-500 text-white dark:border-yellow-600 dark:bg-yellow-600",
+        info: "border-blue-500 bg-blue-500 text-white dark:border-blue-600 dark:bg-blue-600",
       },
     },
     defaultVariants: {
@@ -42,8 +44,17 @@ const toastVariants = cva(
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> & VariantProps<typeof toastVariants>
->(({ className, variant, ...props }, ref) => {
-  return <ToastPrimitives.Root ref={ref} className={cn(toastVariants({ variant }), className)} {...props} />
+>(({ className, variant, children, ...props }, ref) => {
+  return (
+    <ToastPrimitives.Root
+      ref={ref}
+      className={cn(toastVariants({ variant }), className)}
+      {...props}
+      data-testid="toast"
+    >
+      {children}
+    </ToastPrimitives.Root>
+  )
 })
 Toast.displayName = ToastPrimitives.Root.displayName
 
@@ -54,7 +65,7 @@ const ToastAction = React.forwardRef<
   <ToastPrimitives.Action
     ref={ref}
     className={cn(
-      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium transition-colors hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive",
+      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium transition-colors hover:bg-secondary focus:outline-none focus:ring-1 focus:ring-ring disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive group-[.success]:border-green-300 group-[.success]:hover:border-green-700 group-[.success]:hover:bg-green-700 group-[.success]:hover:text-white group-[.success]:focus:ring-green-500 group-[.warning]:border-yellow-300 group-[.warning]:hover:border-yellow-700 group-[.warning]:hover:bg-yellow-700 group-[.warning]:hover:text-white group-[.warning]:focus:ring-yellow-500 group-[.info]:border-blue-300 group-[.info]:hover:border-blue-700 group-[.info]:hover:bg-blue-700 group-[.info]:hover:text-white group-[.info]:focus:ring-blue-500",
       className,
     )}
     {...props}
@@ -69,10 +80,11 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-1 top-1 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-1 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
+      "absolute right-1 top-1 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-1 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600 group-[.success]:text-green-200 group-[.success]:hover:text-green-50 group-[.success]:focus:ring-green-400 group-[.warning]:text-yellow-200 group-[.warning]:hover:text-yellow-50 group-[.warning]:focus:ring-yellow-400 group-[.info]:text-blue-200 group-[.info]:hover:text-blue-50 group-[.info]:focus:ring-blue-400",
       className,
     )}
     toast-close=""
+    aria-label="Fechar"
     {...props}
   >
     <Cross2Icon className="h-4 w-4" />
@@ -96,7 +108,28 @@ const ToastDescription = React.forwardRef<
 ))
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 
-type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
+type ToastProps = React.ComponentPropsWithoutRef<typeof Toast> & {
+  title?: React.ReactNode
+  description?: React.ReactNode
+  action?: React.ReactNode
+  onClose?: () => void
+}
+
+// Componente composto para facilitar o uso
+const ToastComponent = React.forwardRef<React.ElementRef<typeof Toast>, ToastProps>(
+  ({ title, description, action, onClose, children, ...props }, ref) => (
+    <Toast ref={ref} {...props}>
+      <div className="grid gap-1">
+        {title && <ToastTitle>{title}</ToastTitle>}
+        {description && <ToastDescription>{description}</ToastDescription>}
+      </div>
+      {action}
+      {children}
+      <ToastClose onClick={onClose} />
+    </Toast>
+  ),
+)
+ToastComponent.displayName = "ToastComponent"
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
@@ -110,4 +143,5 @@ export {
   ToastDescription,
   ToastClose,
   ToastAction,
+  ToastComponent as Toast, // Exporta o componente composto como Toast
 }

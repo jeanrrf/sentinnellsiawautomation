@@ -3,6 +3,7 @@ import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { fontSans } from "@/app/fonts"
 import { cn } from "@/lib/utils"
+import { ToastProvider } from "@/components/ui/use-toast"
 
 export const metadata = {
   title: "Shopee TikTok Generator",
@@ -16,6 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head />
       <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ToastProvider />
           {children}
         </ThemeProvider>
       </body>
