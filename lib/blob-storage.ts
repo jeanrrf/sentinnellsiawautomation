@@ -99,18 +99,8 @@ export async function cleanupBlobStorage(prefix = CACHE_KEYS.VIDEO_PREFIX) {
   }
 }
 
-/**
- * Upload a video to Blob Storage
- * This is an alias for uploadVideoToBlob for compatibility
- */
-export async function uploadVideo(videoBuffer: Buffer, productId: string, format = "mp4") {
-  return uploadVideoToBlob(videoBuffer, productId, format)
-}
+// Alias para compatibilidade com código existente
+export const uploadVideo = uploadVideoToBlob
 
-/**
- * Delete a video from Blob Storage
- * This is an alias for deleteVideoFromBlob for compatibility
- */
-export async function deleteVideo(url: string) {
-  return deleteVideoFromBlob(url)
-}
+// Alias para compatibilidade com código existente
+export const deleteVideo = deleteVideoFromBlob

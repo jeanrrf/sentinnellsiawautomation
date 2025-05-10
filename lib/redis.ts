@@ -74,14 +74,11 @@ export async function getCachedDescription(productId: string) {
 }
 
 // Função para salvar descrição no cache
-export async function saveCachedDescription(productId: string, description: string) {
+export async function cacheDescription(productId: string, description: string): Promise<void> {
   try {
-    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}:${productId}`
-    await redis.set(key, description)
-    return true
+    await redis.set(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`, description, { ex: CACHE_TTL.DESCRIPTIONS })
   } catch (error) {
-    console.error(`Error saving cached description for product ${productId}:`, error)
-    return false
+    console.error(`Error caching description for product ${productId}:`, error)
   }
 }
 
@@ -114,6 +111,36 @@ export async function createCacheEntry(key: string, value: any, ttl?: number): P
     console.log(`Cache entry created for key: ${key}`)
   } catch (error) {
     console.error(`Error creating cache entry for key ${key}:`, error)
+  }
+}
+
+export async function getCacheEntry(key: string): Promise<any | null> {
+  try {
+    const cachedData = await redis.get(key)
+
+    if (!cachedData) return null
+
+    // Handle the case where the data might already be an object
+    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
+      console.log("Cached data is already an object, returning directly")
+      return cachedData
+    }
+
+    // If it's a string, parse it
+    if (typeof cachedData === "string") {
+      try {
+        return JSON.parse(cachedData)
+      } catch (parseError) {
+        console.error("Error parsing cached data:", parseError)
+        return null
+      }
+    }
+
+    console.error("Unexpected cached data format:", typeof cachedData)
+    return null
+  } catch (error) {
+    console.error("Error getting cached data:", error)
+    return null
   }
 }
 
@@ -403,40 +430,6 @@ export async function cleanupCache(): Promise<void> {
     console.log("Cache cleanup completed")
   } catch (error) {
     console.error("Error during cache cleanup:", error)
-  }
-}
-
-/**
- * Cache a description for a product
- * This is an alias for saveCachedDescription for compatibility
- */
-export async function cacheDescription(productId: string, description: string): Promise<boolean> {
-  return saveCachedDescription(productId, description)
-}
-
-/**
- * Get a cache entry by key
- * Generic function to get any cache entry
- */
-export async function getCacheEntry(key: string): Promise<any> {
-  try {
-    const data = await redis.get(key)
-    if (!data) return null
-
-    // If it's a string that looks like JSON, parse it
-    if (typeof data === "string" && (data.startsWith("{") || data.startsWith("["))) {
-      try {
-        return JSON.parse(data)
-      } catch (e) {
-        // If parsing fails, return the raw data
-        return data
-      }
-    }
-
-    return data
-  } catch (error) {
-    console.error(`Error getting cache entry for key ${key}:`, error)
-    return null
   }
 }
 

@@ -102,28 +102,7 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       // Atualizar etapa
       setGenerationStep("Renderizando card e convertendo para vídeo...")
 
-      // First, ensure we have a template
-      const templateResponse = await fetch("/api/generate-video", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          productId: selectedProduct,
-          useAI: true,
-          videoStyle: videoStyle,
-        }),
-      })
-
-      if (!templateResponse.ok) {
-        const templateError = await templateResponse.json()
-        throw new Error(templateError.message || "Error generating video template")
-      }
-
-      const templateData = await templateResponse.json()
-      setPreviewHtml(templateData.htmlTemplate)
-
-      // Now generate the actual video
+      // Fazer a requisição para gerar o vídeo
       const response = await fetch("/api/generate-product-video", {
         method: "POST",
         headers: {
