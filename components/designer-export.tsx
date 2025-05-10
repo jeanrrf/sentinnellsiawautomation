@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
+import { VideoGeneratorPro } from "@/components/video-generator-pro"
 
 /**
  * DesignerExport - Componente principal para criação e geração de cards para TikTok
@@ -749,6 +750,7 @@ export function DesignerExport() {
           </CardContent>
         </Card>
       </div>
+      <VideoGeneratorPro products={products} />
     </div>
   )
 }
