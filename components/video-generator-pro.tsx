@@ -61,9 +61,9 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
   const [generationStep, setGenerationStep] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [generationHistory, setGenerationHistory] = useState<any[]>([])
-  const [isExporting, setIsExporting] = useState(false)
+  const [isExporting, setIsExporting] = useState(isExporting)
   const [previewHtml, setPreviewHtml] = useState("")
-  const [isUploading, setIsUploading] = useState(false)
+  const [isUploading, setIsUploading] = useState(isUploading)
   const [productsLoaded, setProductsLoaded] = useState(false)
   const [showProductNotFoundAlert, setShowProductNotFoundAlert] = useState(false)
   const [productValidationDone, setProductValidationDone] = useState(false)
@@ -188,6 +188,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
     setProductValidationDone(true)
   }, [safeProducts, selectedProduct, setSelectedProduct, toast])
 
+  // Update handleGenerateVideo function to include error handling for video playback
   const handleGenerateVideo = async () => {
     if (!selectedProduct) {
       logger.warning("Attempted to generate video without selecting a product", {
@@ -270,9 +271,39 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
       logger.debug("Receiving video blob from API")
       const videoBlob = await response.blob()
 
+      // Verificar se o blob é válido e tem conteúdo
+      if (!videoBlob || videoBlob.size === 0) {
+        logger.error("Received empty video blob from API", {
+          code: ErrorCodes.VIDEO.EMPTY_RESPONSE,
+          context: { productId: selectedProduct },
+        })
+        throw new Error("Vídeo recebido está vazio ou inválido")
+      }
+
+      logger.debug("Video blob received", {
+        context: { size: videoBlob.size, type: videoBlob.type },
+      })
+
       // Criar URL para o blob
       const url = URL.createObjectURL(videoBlob)
       setVideoUrl(url)
+
+      // Verificar se o vídeo pode ser reproduzido
+      const canPlay = await testVideoPlayback(url)
+      if (!canPlay) {
+        logger.warning("Video cannot be played, using fallback", {
+          code: ErrorCodes.VIDEO.PLAYBACK_FAILED,
+          context: { blobSize: videoBlob.size, blobType: videoBlob.type },
+        })
+
+        // Se não puder ser reproduzido, usar fallback
+        toast({
+          variant: "warning",
+          title: "Aviso de reprodução",
+          description:
+            "O vídeo foi gerado mas pode haver problemas na reprodução. O download foi iniciado automaticamente.",
+        })
+      }
 
       // Atualizar progresso para 100%
       setProgress(100)
@@ -300,9 +331,12 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
 
       setGenerationHistory((prev) => [newHistoryItem, ...prev.slice(0, 9)]) // Manter apenas os 10 mais recentes
 
+      // Iniciar download automaticamente
+      initiateDownload(url, selectedProduct)
+
       toast({
         title: "Vídeo gerado com sucesso",
-        description: "Você pode visualizar e baixar o vídeo agora",
+        description: "O download do vídeo foi iniciado automaticamente",
       })
     } catch (error) {
       logger.error("Error during video generation", {
@@ -328,6 +362,43 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
     }
   }
 
+  // Add a helper function to test if a video is playable
+  const testVideoPlayback = async (videoUrl: string): Promise<boolean> => {
+    return new Promise((resolve) => {
+      const video = document.createElement("video")
+
+      // Set timeout to avoid waiting too long
+      const timeout = setTimeout(() => {
+        video.removeAttribute("src")
+        video.load()
+        logger.warning("Video playback test timed out", {
+          code: ErrorCodes.VIDEO.PLAYBACK_TIMEOUT,
+        })
+        resolve(false)
+      }, 5000)
+
+      // Set up event handlers
+      video.onloadeddata = () => {
+        clearTimeout(timeout)
+        logger.debug("Video playback test succeeded")
+        resolve(true)
+      }
+
+      video.onerror = () => {
+        clearTimeout(timeout)
+        logger.error("Video playback test failed", {
+          code: ErrorCodes.VIDEO.PLAYBACK_FAILED,
+          context: { error: video.error?.message || "Unknown error" },
+        })
+        resolve(false)
+      }
+
+      // Start loading the video
+      video.src = videoUrl
+      video.load()
+    })
+  }
+
   const handleDownloadVideo = () => {
     if (!videoUrl) {
       logger.warning("Attempted to download video without a valid URL", {
@@ -336,21 +407,26 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
       return
     }
 
-    logger.info("Downloading video", {
-      context: { productId: selectedProduct },
+    initiateDownload(videoUrl, selectedProduct)
+  }
+
+  // Função para iniciar o download automaticamente
+  const initiateDownload = (url: string, productId: string) => {
+    logger.info("Initiating automatic download", {
+      context: { productId },
     })
 
     try {
       const a = document.createElement("a")
-      a.href = videoUrl
-      a.download = `produto-${selectedProduct}-${Date.now()}.mp4`
+      a.href = url
+      a.download = `produto-${productId}-${Date.now()}.mp4`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
 
-      logger.info("Video download initiated successfully")
+      logger.info("Automatic download initiated successfully")
     } catch (error) {
-      logger.error("Failed to download video", {
+      logger.error("Failed to initiate automatic download", {
         code: ErrorCodes.STORAGE.BLOB_DOWNLOAD_FAILED,
         details: error,
       })
@@ -358,7 +434,12 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
       toast({
         variant: "destructive",
         title: "Erro ao baixar vídeo",
-        description: "Não foi possível iniciar o download do vídeo",
+        description: "Não foi possível iniciar o download automático do vídeo",
+        action: (
+          <ToastAction altText="Tentar novamente" onClick={() => initiateDownload(url, productId)}>
+            Tentar novamente
+          </ToastAction>
+        ),
       })
     }
   }
@@ -702,6 +783,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
     },
   })
 
+  // Update the Preview tab in the render function to handle playback errors
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
       <Card>
@@ -934,7 +1016,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               A geração de vídeo pode levar até 30 segundos. O processo utiliza recursos do servidor para renderizar o
-              card em alta qualidade.
+              card em alta qualidade. Após a geração, o download será iniciado automaticamente.
             </AlertDescription>
           </Alert>
         </CardContent>
@@ -948,7 +1030,7 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
             ) : (
               <>
                 <Video className="mr-2 h-4 w-4" />
-                <span>Gerar Vídeo MP4</span>
+                <span>Gerar e Baixar Vídeo MP4</span>
               </>
             )}
           </Button>
@@ -1001,6 +1083,23 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                       controls
                       autoPlay
                       loop
+                      onError={(e) => {
+                        logger.error("Error playing video", {
+                          code: ErrorCodes.VIDEO.PLAYBACK_FAILED,
+                          context: { error: (e.target as HTMLVideoElement).error?.message || "Unknown error" },
+                        })
+
+                        toast({
+                          variant: "destructive",
+                          title: "Erro na reprodução",
+                          description: "Não foi possível reproduzir o vídeo. Tente fazer o download.",
+                          action: (
+                            <ToastAction altText="Download" onClick={handleDownloadVideo}>
+                              Download
+                            </ToastAction>
+                          ),
+                        })
+                      }}
                       aria-label="Preview do vídeo gerado"
                     />
                   </div>
@@ -1009,7 +1108,22 @@ export function VideoGeneratorPro({ products = [] }: VideoGeneratorProProps) {
                     <Button
                       variant="outline"
                       className="flex-1"
-                      onClick={() => videoRef.current?.play()}
+                      onClick={() => {
+                        if (videoRef.current) {
+                          videoRef.current.currentTime = 0
+                          videoRef.current.play().catch((error) => {
+                            logger.error("Failed to play video", {
+                              code: ErrorCodes.VIDEO.PLAYBACK_FAILED,
+                              details: error,
+                            })
+                            toast({
+                              variant: "destructive",
+                              title: "Erro na reprodução",
+                              description: "Não foi possível reproduzir o vídeo. Tente fazer o download.",
+                            })
+                          })
+                        }
+                      }}
                       aria-label="Reproduzir vídeo"
                     >
                       <Play className="mr-2 h-4 w-4" />
