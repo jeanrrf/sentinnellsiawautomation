@@ -33,35 +33,74 @@ export const CACHE_TTL = {
   VIDEOS: 60 * 60 * 24 * 30, // 30 days for videos
 }
 
-// Create Redis client with better error handling
-let redis: Redis
+// Criar cliente Redis usando variáveis de ambiente
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || process.env.REDIS_URL || "",
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "",
+})
 
-try {
-  // Use REST client which is more reliable for serverless environments
-  redis = new Redis({
-    url: process.env.KV_REST_API_URL || "https://moral-slug-22722.upstash.io",
-    token: process.env.KV_REST_API_TOKEN || "AVjCAAIjcDEzYWMzZmZkMGY1OWE0NDVmODFjNmM1NTRmYWFhYWVlOXAxMA",
-  })
+// Função para obter produtos em cache
+export async function getCachedProducts() {
+  try {
+    const products = await redis.get(CACHE_KEYS.PRODUCTS)
+    return products || []
+  } catch (error) {
+    console.error("Error getting cached products:", error)
+    return []
+  }
+}
 
-  console.log("Redis client initialized successfully")
-} catch (error) {
-  console.error("Failed to initialize Redis client:", error)
-  // Create a mock Redis client that doesn't throw errors
-  redis = {
-    get: async () => null,
-    set: async () => "OK",
-    sadd: async () => 1,
-    sismember: async () => 0,
-    ttl: async () => -1,
-    expire: async () => true,
-    exists: async () => 0,
-    scard: async () => 0,
-    keys: async () => [],
-    smembers: async () => [],
-    srem: async () => 0,
-    del: async () => 0,
-    smove: async () => 1,
-  } as unknown as Redis
+// Função para obter um produto específico do cache
+export async function getCachedProduct(productId: string) {
+  try {
+    const products = await getCachedProducts()
+    return products.find((p: any) => p.itemId === productId) || null
+  } catch (error) {
+    console.error(`Error getting cached product ${productId}:`, error)
+    return null
+  }
+}
+
+// Função para obter descrição em cache
+export async function getCachedDescription(productId: string) {
+  try {
+    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}:${productId}`
+    const description = await redis.get(key)
+    return description || null
+  } catch (error) {
+    console.error(`Error getting cached description for product ${productId}:`, error)
+    return null
+  }
+}
+
+// Função para salvar descrição no cache
+export async function saveCachedDescription(productId: string, description: string) {
+  try {
+    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}:${productId}`
+    await redis.set(key, description)
+    return true
+  } catch (error) {
+    console.error(`Error saving cached description for product ${productId}:`, error)
+    return false
+  }
+}
+
+// Função para limpar o cache
+export async function clearCache() {
+  try {
+    // Obter todas as chaves
+    const keys = await redis.keys("*")
+
+    // Excluir cada chave
+    for (const key of keys) {
+      await redis.del(key)
+    }
+
+    return true
+  } catch (error) {
+    console.error("Error clearing cache:", error)
+    return false
+  }
 }
 
 // Adicionando as funções que estavam faltando
@@ -75,36 +114,6 @@ export async function createCacheEntry(key: string, value: any, ttl?: number): P
     console.log(`Cache entry created for key: ${key}`)
   } catch (error) {
     console.error(`Error creating cache entry for key ${key}:`, error)
-  }
-}
-
-export async function getCacheEntry(key: string): Promise<any | null> {
-  try {
-    const cachedData = await redis.get(key)
-
-    if (!cachedData) return null
-
-    // Handle the case where the data might already be an object
-    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
-      console.log("Cached data is already an object, returning directly")
-      return cachedData
-    }
-
-    // If it's a string, parse it
-    if (typeof cachedData === "string") {
-      try {
-        return JSON.parse(cachedData)
-      } catch (parseError) {
-        console.error("Error parsing cached data:", parseError)
-        return null
-      }
-    }
-
-    console.error("Unexpected cached data format:", typeof cachedData)
-    return null
-  } catch (error) {
-    console.error("Error getting cached data:", error)
-    return null
   }
 }
 
@@ -133,87 +142,6 @@ export async function cacheProducts(products: any[]): Promise<void> {
   } catch (error) {
     console.error("Error caching products:", error)
     // Continue execution even if caching fails
-  }
-}
-
-export async function getCachedProducts(): Promise<any[] | null> {
-  try {
-    const cachedData = await redis.get(CACHE_KEYS.PRODUCTS)
-
-    if (!cachedData) return null
-
-    // Handle the case where the data might already be an object
-    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
-      console.log("Cached data is already an object, returning directly")
-      return cachedData as any[]
-    }
-
-    // If it's a string, parse it
-    if (typeof cachedData === "string") {
-      try {
-        return JSON.parse(cachedData)
-      } catch (parseError) {
-        console.error("Error parsing cached products:", parseError)
-        return null
-      }
-    }
-
-    // If it's already an array, return it directly
-    if (Array.isArray(cachedData)) {
-      return cachedData
-    }
-
-    console.error("Unexpected cached data format:", typeof cachedData)
-    return null
-  } catch (error) {
-    console.error("Error getting cached products:", error)
-    return null
-  }
-}
-
-export async function getCachedProduct(productId: string): Promise<any | null> {
-  try {
-    const cachedData = await redis.get(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
-
-    if (!cachedData) return null
-
-    // Handle the case where the data might already be an object
-    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
-      return cachedData
-    }
-
-    // If it's a string, parse it
-    if (typeof cachedData === "string") {
-      try {
-        return JSON.parse(cachedData)
-      } catch (parseError) {
-        console.error(`Error parsing cached product ${productId}:`, parseError)
-        return null
-      }
-    }
-
-    console.error("Unexpected cached product format:", typeof cachedData)
-    return null
-  } catch (error) {
-    console.error(`Error getting cached product ${productId}:`, error)
-    return null
-  }
-}
-
-export async function cacheDescription(productId: string, description: string): Promise<void> {
-  try {
-    await redis.set(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`, description, { ex: CACHE_TTL.DESCRIPTIONS })
-  } catch (error) {
-    console.error(`Error caching description for product ${productId}:`, error)
-  }
-}
-
-export async function getCachedDescription(productId: string): Promise<string | null> {
-  try {
-    return redis.get<string>(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`)
-  } catch (error) {
-    console.error(`Error getting cached description for product ${productId}:`, error)
-    return null
   }
 }
 
@@ -475,6 +403,40 @@ export async function cleanupCache(): Promise<void> {
     console.log("Cache cleanup completed")
   } catch (error) {
     console.error("Error during cache cleanup:", error)
+  }
+}
+
+/**
+ * Cache a description for a product
+ * This is an alias for saveCachedDescription for compatibility
+ */
+export async function cacheDescription(productId: string, description: string): Promise<boolean> {
+  return saveCachedDescription(productId, description)
+}
+
+/**
+ * Get a cache entry by key
+ * Generic function to get any cache entry
+ */
+export async function getCacheEntry(key: string): Promise<any> {
+  try {
+    const data = await redis.get(key)
+    if (!data) return null
+
+    // If it's a string that looks like JSON, parse it
+    if (typeof data === "string" && (data.startsWith("{") || data.startsWith("["))) {
+      try {
+        return JSON.parse(data)
+      } catch (e) {
+        // If parsing fails, return the raw data
+        return data
+      }
+    }
+
+    return data
+  } catch (error) {
+    console.error(`Error getting cache entry for key ${key}:`, error)
+    return null
   }
 }
 

@@ -1,87 +1,108 @@
 "use client"
 
-import { useState } from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-
-interface Product {
-  itemId: string
-  productName: string
-}
+import { Button } from "@/components/ui/button"
+import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface ProductSelectorProps {
-  products: Product[]
+  products: any[]
   value: string
   onChange: (value: string) => void
 }
 
 export function ProductSelector({ products, value, onChange }: ProductSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [searchTerm, setSearchTerm] = useState("")
+  const [filteredProducts, setFilteredProducts] = useState(products)
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Função para truncar o nome do produto se for muito longo
-  const truncateProductName = (name: string, maxLength = 50) => {
-    if (name.length <= maxLength) return name
-    return name.substring(0, maxLength) + "..."
-  }
+  // Filtrar produtos quando o termo de pesquisa mudar
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredProducts(products)
+      return
+    }
+
+    const lowerSearchTerm = searchTerm.toLowerCase()
+    const filtered = products.filter(
+      (product) =>
+        product.productName.toLowerCase().includes(lowerSearchTerm) ||
+        product.itemId.toString().includes(lowerSearchTerm),
+    )
+    setFilteredProducts(filtered)
+  }, [searchTerm, products])
+
+  // Buscar produtos se não houver nenhum
+  useEffect(() => {
+    if (products.length === 0) {
+      const fetchProducts = async () => {
+        setIsLoading(true)
+        try {
+          const response = await fetch("/api/products")
+          if (response.ok) {
+            const data = await response.json()
+            setFilteredProducts(data.products || [])
+          }
+        } catch (error) {
+          console.error("Error fetching products:", error)
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      fetchProducts()
+    }
+  }, [products])
 
   // Encontrar o produto selecionado
   const selectedProduct = products.find((product) => product.itemId === value)
 
-  // Texto a ser exibido no botão
-  const buttonText = selectedProduct ? truncateProductName(selectedProduct.productName) : "Selecione um produto"
-
-  const handleSelectChange = (newValue: string) => {
-    console.log("Produto selecionado:", newValue)
-
-    // Verificar se o produto existe na lista
-    const productExists = products.some((p) => p.itemId === newValue)
-    if (!productExists && newValue) {
-      console.warn("Produto selecionado não encontrado na lista:", newValue)
-    }
-
-    onChange(newValue)
-
-    // Salvar a seleção no localStorage para persistência
-    try {
-      localStorage.setItem("selectedProductId", newValue)
-    } catch (error) {
-      console.error("Erro ao salvar produto no localStorage:", error)
-    }
-  }
-
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between overflow-hidden"
-        >
-          <span className="truncate mr-2">{buttonText}</span>
-          <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50 ml-auto" />
+        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
+          {isLoading ? (
+            <div className="flex items-center">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <span>Carregando produtos...</span>
+            </div>
+          ) : value ? (
+            <div className="flex items-center">
+              <span className="truncate max-w-[300px]">
+                {selectedProduct ? selectedProduct.productName : "Selecione um produto"}
+              </span>
+            </div>
+          ) : (
+            "Selecione um produto"
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0">
+      <PopoverContent className="w-full p-0" align="start">
         <Command>
-          <CommandInput placeholder="Buscar produtos..." />
+          <CommandInput placeholder="Buscar produto..." value={searchTerm} onValueChange={setSearchTerm} />
           <CommandList>
             <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
-            <CommandGroup className="max-h-[300px] overflow-y-auto">
-              {products.map((product) => (
+            <CommandGroup heading="Produtos">
+              {filteredProducts.map((product) => (
                 <CommandItem
                   key={product.itemId}
                   value={product.itemId}
-                  onSelect={() => {
-                    handleSelectChange(product.itemId === value ? "" : product.itemId)
+                  onSelect={(currentValue) => {
+                    onChange(currentValue === value ? "" : currentValue)
                     setOpen(false)
                   }}
                 >
                   <Check className={cn("mr-2 h-4 w-4", value === product.itemId ? "opacity-100" : "opacity-0")} />
-                  <span className="truncate">{product.productName}</span>
+                  <div className="flex flex-col">
+                    <span className="truncate max-w-[300px]">{product.productName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      ID: {product.itemId} | R$ {product.price} | Vendas: {product.sales}
+                    </span>
+                  </div>
                 </CommandItem>
               ))}
             </CommandGroup>

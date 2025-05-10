@@ -1,87 +1,116 @@
 import { put, list, del } from "@vercel/blob"
-import { getVideos } from "./redis"
+import { CACHE_KEYS } from "./constants"
 
-// Prefixo para organizar os vídeos no Blob Storage
-const VIDEO_PREFIX = "tiktok-videos/"
-
-/**
- * Faz upload de um vídeo para o Blob Storage
- * @param videoBuffer Buffer do vídeo
- * @param filename Nome do arquivo
- * @returns URL do vídeo no Blob Storage
- */
-export async function uploadVideo(videoBuffer: Buffer, filename: string): Promise<string> {
+// Função para fazer upload de um vídeo para o Blob Storage
+export async function uploadVideoToBlob(videoBuffer: Buffer, productId: string, format = "mp4") {
   try {
-    // Garantir que o nome do arquivo tenha a extensão .mp4
-    if (!filename.endsWith(".mp4")) {
-      filename = `${filename}.mp4`
-    }
-
-    // Adicionar prefixo e timestamp para evitar colisões
-    const blobFilename = `${VIDEO_PREFIX}${Date.now()}-${filename}`
-
-    // Fazer upload para o Blob Storage
-    const blob = await put(blobFilename, videoBuffer, {
+    const filename = `video_${productId}_${Date.now()}.${format}`
+    const blob = await put(filename, videoBuffer, {
       access: "public",
-      contentType: "video/mp4",
+      contentType: `video/${format}`,
+      addRandomSuffix: true,
     })
 
-    console.log(`Vídeo enviado para o Blob Storage: ${blob.url}`)
-    return blob.url
+    console.log(`Video uploaded to Blob Storage: ${blob.url}`)
+    return {
+      success: true,
+      url: blob.url,
+      filename: blob.pathname,
+    }
   } catch (error) {
-    console.error("Erro ao fazer upload do vídeo para o Blob Storage:", error)
-    throw error
+    console.error("Error uploading video to Blob Storage:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
   }
 }
 
-/**
- * Lista todos os vídeos armazenados no Blob Storage
- */
-export async function listVideos() {
+// Função para listar todos os vídeos no Blob Storage
+export async function listVideosFromBlob(prefix = CACHE_KEYS.VIDEO_PREFIX) {
   try {
-    const { blobs } = await list({ prefix: VIDEO_PREFIX })
-    return blobs
+    const { blobs } = await list({ prefix })
+    return {
+      success: true,
+      videos: blobs.map((blob) => ({
+        url: blob.url,
+        filename: blob.pathname,
+        size: blob.size,
+        uploadedAt: blob.uploadedAt,
+      })),
+    }
   } catch (error) {
-    console.error("Erro ao listar vídeos do Blob Storage:", error)
-    return []
+    console.error("Error listing videos from Blob Storage:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+      videos: [],
+    }
   }
 }
 
-/**
- * Exclui um vídeo do Blob Storage
- * @param url URL do vídeo no Blob Storage
- */
-export async function deleteVideo(url: string): Promise<void> {
+// Função para excluir um vídeo do Blob Storage
+export async function deleteVideoFromBlob(url: string) {
   try {
     await del(url)
-    console.log(`Vídeo excluído do Blob Storage: ${url}`)
+    console.log(`Video deleted from Blob Storage: ${url}`)
+    return {
+      success: true,
+    }
   } catch (error) {
-    console.error("Erro ao excluir vídeo do Blob Storage:", error)
-    throw error
+    console.error("Error deleting video from Blob Storage:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+    }
+  }
+}
+
+// Função para limpar todos os vídeos do Blob Storage
+export async function cleanupBlobStorage(prefix = CACHE_KEYS.VIDEO_PREFIX) {
+  try {
+    const { videos } = await listVideosFromBlob(prefix)
+
+    if (!videos || videos.length === 0) {
+      return {
+        success: true,
+        message: "No videos to clean up",
+        count: 0,
+      }
+    }
+
+    const deletePromises = videos.map((video) => deleteVideoFromBlob(video.url))
+    const results = await Promise.all(deletePromises)
+
+    const successCount = results.filter((result) => result.success).length
+
+    return {
+      success: true,
+      message: `Deleted ${successCount} of ${videos.length} videos`,
+      count: successCount,
+    }
+  } catch (error) {
+    console.error("Error cleaning up Blob Storage:", error)
+    return {
+      success: false,
+      error: error.message || "Unknown error",
+      count: 0,
+    }
   }
 }
 
 /**
- * Sincroniza os vídeos do Redis com o Blob Storage
- * Útil para migrar vídeos existentes
+ * Upload a video to Blob Storage
+ * This is an alias for uploadVideoToBlob for compatibility
  */
-export async function syncVideosWithBlobStorage(): Promise<void> {
-  try {
-    // Obter vídeos do Redis
-    const videos = await getVideos()
+export async function uploadVideo(videoBuffer: Buffer, productId: string, format = "mp4") {
+  return uploadVideoToBlob(videoBuffer, productId, format)
+}
 
-    // Listar vídeos no Blob Storage
-    const { blobs } = await list({ prefix: VIDEO_PREFIX })
-    const blobUrls = blobs.map((blob) => blob.url)
-
-    console.log(`Encontrados ${videos.length} vídeos no Redis e ${blobUrls.length} no Blob Storage`)
-
-    // Para cada vídeo no Redis, verificar se já existe no Blob Storage
-    // Se não existir e tivermos o HTML, podemos converter e fazer upload
-    // Esta é uma funcionalidade avançada que pode ser implementada posteriormente
-
-    return
-  } catch (error) {
-    console.error("Erro ao sincronizar vídeos com Blob Storage:", error)
-  }
+/**
+ * Delete a video from Blob Storage
+ * This is an alias for deleteVideoFromBlob for compatibility
+ */
+export async function deleteVideo(url: string) {
+  return deleteVideoFromBlob(url)
 }

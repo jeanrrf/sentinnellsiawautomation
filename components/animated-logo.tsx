@@ -1,52 +1,29 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useTheme } from "next-themes"
+import Link from "next/link"
 
-/**
- * AnimatedLogo - Logo animado com gradiente que se adapta ao tema
- * Não inclui o Link para evitar aninhamento de tags <a>
- */
 export function AnimatedLogo() {
-  const [mounted, setMounted] = useState(false)
-  const { theme } = useTheme()
+  const [isAnimating, setIsAnimating] = useState(false)
 
-  // Evitar problemas de hidratação
   useEffect(() => {
-    setMounted(true)
+    const interval = setInterval(() => {
+      setIsAnimating(true)
+      setTimeout(() => setIsAnimating(false), 2000)
+    }, 10000)
+
+    return () => clearInterval(interval)
   }, [])
 
-  // Determinar as cores do gradiente com base no tema
-  const getGradientColors = () => {
-    if (!mounted) return "linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a)"
-
-    return theme === "dark"
-      ? "linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a)"
-      : "linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a)"
-  }
-
   return (
-    <h1
-      className="text-3xl font-bold tracking-tight cursor-pointer"
-      style={{
-        backgroundImage: getGradientColors(),
-        backgroundSize: "300% 300%",
-        backgroundClip: "text",
-        WebkitBackgroundClip: "text",
-        color: "transparent",
-        WebkitTextFillColor: "transparent",
-        animation: "gradient 5s ease infinite",
-        filter: "drop-shadow(0 2px 12px rgba(177, 85, 255, 0.5))",
-      }}
-    >
-      SENTINNELL AutoSeller
-      <style jsx global>{`
-        @keyframes gradient {
-          0% { background-position: 0% 50%; }
-          50% { background-position: 100% 50%; }
-          100% { background-position: 0% 50%; }
-        }
-      `}</style>
-    </h1>
+    <Link href="/" className="flex items-center space-x-2">
+      <span
+        className={`text-2xl font-bold transition-all duration-500 ${
+          isAnimating ? "bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent" : ""
+        }`}
+      >
+        TikTok Generator
+      </span>
+    </Link>
   )
 }

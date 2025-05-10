@@ -1,26 +1,22 @@
 import type React from "react"
+import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { ToastProvider } from "@/components/ui/use-toast"
-import { brunoAceSC } from "./fonts"
-import "./globals.css"
+import { fontSans } from "@/app/fonts"
+import { cn } from "@/lib/utils"
 
 export const metadata = {
-  title: "Shopee TikTok Video Generator",
-  description: "Gerador automatizado de vídeos para TikTok com produtos da Shopee",
+  title: "Shopee TikTok Generator",
+  description: "Gerador automatizado de vídeos para TikTok a partir de produtos da Shopee",
     generator: 'v0.dev'
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
-      </head>
-      <body className={`${brunoAceSC.variable}`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <ToastProvider>{children}</ToastProvider>
+      <head />
+      <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
         </ThemeProvider>
       </body>
     </html>

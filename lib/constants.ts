@@ -1,37 +1,44 @@
-// Importando CACHE_KEYS de redis.ts
-import { CACHE_KEYS } from "./redis"
+// Chaves de cache
+export const CACHE_KEYS = {
+  PRODUCTS: "products",
+  PROCESSED_IDS: "processed_ids",
+  DESCRIPTION_PREFIX: "description",
+  VIDEO_PREFIX: "video",
+  PUBLISHED_VIDEOS: "published_videos",
+}
 
-// Re-exportando CACHE_KEYS
-export { CACHE_KEYS }
-
-// Outras constantes do sistema
+// Formatos de vídeo
 export const VIDEO_FORMATS = {
   PORTRAIT: "portrait",
   LANDSCAPE: "landscape",
   SQUARE: "square",
 }
 
+// Qualidades de vídeo
 export const VIDEO_QUALITIES = {
   LOW: "low",
   MEDIUM: "medium",
   HIGH: "high",
 }
 
-export const SYSTEM_PATHS = {
+// Caminhos
+export const PATHS = {
   TEMP: process.env.TEMP_DIR || "/tmp",
   UPLOADS: "/uploads",
   VIDEOS: "/videos",
 }
 
-export const DEFAULT_SETTINGS = {
-  VIDEO_DURATION: 10,
+// Configurações padrão
+export const DEFAULT_CONFIG = {
+  DURATION: 10,
   FPS: 30,
   QUALITY: VIDEO_QUALITIES.MEDIUM,
   FORMAT: VIDEO_FORMATS.PORTRAIT,
 }
 
+// Endpoints da API
 export const API_ENDPOINTS = {
-  SHOPEE: process.env.SHOPEE_AFFILIATE_API_URL || "https://open-api.affiliate.shopee.com.br",
+  SHOPEE: "/api/fetch-shopee",
   GENERATE_VIDEO: "/api/generate-video",
   SAVE_VIDEO: "/api/save-video",
   PUBLISH_VIDEO: "/api/publish-video",

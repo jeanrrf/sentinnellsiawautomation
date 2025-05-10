@@ -5,6 +5,22 @@ import { convertImageToVideo, optimizeVideoForSocialMedia } from "@/lib/ffmpeg-c
 import { getCachedProduct, createCacheEntry, getCacheEntry } from "@/lib/redis"
 import path from "path"
 
+// Fallback description generator
+function createFallbackDescription(product: any) {
+  const price = Number.parseFloat(product.price)
+  const stars = Number.parseFloat(product.ratingStar || "4.5")
+  const sales = Number.parseInt(product.sales)
+
+  // Criar uma descrição curta e direta
+  const urgency = sales > 1000 ? "🔥 OFERTA IMPERDÍVEL!" : "⚡ PROMOÇÃO!"
+  const rating = "⭐".repeat(Math.min(Math.round(stars), 5))
+
+  // Limitar o nome do produto a 30 caracteres
+  const shortName = product.productName.length > 30 ? product.productName.substring(0, 30) + "..." : product.productName
+
+  return `${urgency}\n${shortName}\n${rating}\nApenas R$${price.toFixed(2)}\nJá vendidos: ${sales}\n#oferta #shopee`
+}
+
 // Definir o timeout máximo para 60 segundos (máximo da Vercel)
 export const maxDuration = 60
 
@@ -62,13 +78,47 @@ export async function POST(req: Request) {
     }
 
     // Verificar se já temos o HTML do template
-    const htmlTemplate = productData.htmlTemplate
+    let htmlTemplate = productData.htmlTemplate
 
     if (!htmlTemplate) {
-      return NextResponse.json(
-        { success: false, message: "Template HTML não encontrado para este produto" },
-        { status: 404 },
-      )
+      console.log("Template HTML not found, generating one...")
+      try {
+        // Get description from cache or generate a fallback
+        let description = null
+        try {
+          const { getCachedDescription } = await import("@/lib/redis")
+          description = await getCachedDescription(productId)
+        } catch (error) {
+          console.error("Error getting cached description:", error)
+        }
+
+        // If no description, create a fallback
+        if (!description) {
+          const { createFallbackDescription } = await import("@/lib/utils")
+          description = createFallbackDescription(productData)
+          console.log("Using fallback description for product:", productId)
+        }
+
+        // Import the template renderer
+        const { renderProductCardTemplate } = await import("@/lib/template-renderer")
+
+        // Generate the HTML template
+        htmlTemplate = renderProductCardTemplate(productData, description, style)
+
+        // Update the product data with the template
+        productData.htmlTemplate = htmlTemplate
+
+        // Save the updated product data back to Redis
+        await createCacheEntry(`product:${productId}`, productData, 60 * 60 * 24) // 24 hours TTL
+
+        console.log("Generated and cached HTML template for product:", productId)
+      } catch (templateError) {
+        console.error("Error generating HTML template:", templateError)
+        return NextResponse.json(
+          { success: false, message: `Error generating HTML template: ${templateError.message}` },
+          { status: 500 },
+        )
+      }
     }
 
     console.log("Template HTML encontrado, iniciando renderização...")

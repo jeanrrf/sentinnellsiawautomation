@@ -1,11 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Card } from "@/components/ui/card"
+import { useState, useEffect, useRef, Suspense } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, Copy, Trash2, AlertCircle, Download, Video, HelpCircle } from "lucide-react"
+import { Loader2, Copy, Trash2, AlertCircle, Download, Video } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,8 +22,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 export default function PublicacaoPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -467,127 +466,68 @@ export default function PublicacaoPage() {
 
   return (
     <div className="container mx-auto py-6">
-      <div className="flex flex-col gap-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-2xl font-bold">Publicação de Vídeos</h1>
-            <p className="text-muted-foreground">Gerencie e publique seus vídeos do TikTok</p>
-          </div>
-          <Dialog open={showHelpDialog} onOpenChange={setShowHelpDialog}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1">
-                <HelpCircle className="h-4 w-4" />
-                Como criar MP4
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
-              <DialogHeader>
-                <DialogTitle>Como converter HTML em vídeo MP4</DialogTitle>
-                <DialogDescription>
-                  Siga estas etapas para criar um vídeo MP4 a partir do arquivo HTML baixado.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <h3 className="font-medium">Opção 1: Usando OBS Studio (Gratuito)</h3>
-                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
-                    <li>
-                      Baixe e instale o{" "}
-                      <a
-                        href="https://obsproject.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline"
-                      >
-                        OBS Studio
-                      </a>
-                    </li>
-                    <li>Abra o arquivo HTML baixado em seu navegador</li>
-                    <li>No OBS, adicione uma fonte "Captura de Janela" e selecione a janela do navegador</li>
-                    <li>Ajuste o tamanho para capturar apenas o conteúdo do vídeo</li>
-                    <li>Clique em "Iniciar Gravação" e grave por 5-10 segundos</li>
-                    <li>Clique em "Parar Gravação" e o vídeo será salvo no formato MP4</li>
-                  </ol>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-medium">Opção 2: Usando ScreenToGif (Gratuito, Windows)</h3>
-                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
-                    <li>
-                      Baixe e instale o{" "}
-                      <a
-                        href="https://www.screentogif.com/"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-primary underline"
-                      >
-                        ScreenToGif
-                      </a>
-                    </li>
-                    <li>Abra o arquivo HTML baixado em seu navegador</li>
-                    <li>Abra o ScreenToGif e selecione "Gravador de Tela"</li>
-                    <li>Ajuste a área de captura para cobrir apenas o conteúdo do vídeo</li>
-                    <li>Clique em "Gravar" e grave por 5-10 segundos</li>
-                    <li>Clique em "Parar" e salve o arquivo como MP4</li>
-                  </ol>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="font-medium">Opção 3: Usando QuickTime (Mac)</h3>
-                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
-                    <li>Abra o arquivo HTML baixado em seu navegador</li>
-                    <li>Abra o QuickTime Player e selecione "Arquivo {">"} Nova Gravação de Tela"</li>
-                    <li>Selecione a área do navegador que contém o vídeo</li>
-                    <li>Clique em "Gravar" e grave por 5-10 segundos</li>
-                    <li>Clique no botão de parar e salve o arquivo</li>
-                  </ol>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="button" onClick={() => setShowHelpDialog(false)}>
-                  Entendi
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+      <h1 className="text-3xl font-bold mb-6">Publicação de Vídeos</h1>
+      <p className="text-muted-foreground mb-6">Gerencie seus vídeos gerados e publique-os no TikTok.</p>
 
-        <Tabs defaultValue="pending" className="w-full">
-          <TabsList>
-            <TabsTrigger value="pending">Pendentes ({pendingVideos.length})</TabsTrigger>
-            <TabsTrigger value="published">Publicados ({publishedVideos.length})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="pending" className="mt-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : pendingVideos.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {pendingVideos.map((video: any) => renderVideoCard(video))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <p>Nenhum vídeo pendente encontrado.</p>
-                <p className="text-sm mt-2">Gere novos vídeos na seção Designer para vê-los aqui.</p>
-              </div>
-            )}
-          </TabsContent>
-          <TabsContent value="published" className="mt-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : publishedVideos.length > 0 ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                {publishedVideos.map((video: any) => renderVideoCard(video, false))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <p>Nenhum vídeo publicado encontrado.</p>
-                <p className="text-sm mt-2">Publique vídeos da aba "Pendentes" para vê-los aqui.</p>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+      <Alert variant="warning" className="mb-6">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Atenção</AlertTitle>
+        <AlertDescription>
+          A publicação direta no TikTok requer autenticação com a API do TikTok. Certifique-se de configurar suas
+          credenciais nas configurações.
+        </AlertDescription>
+      </Alert>
+
+      <div className="grid grid-cols-1 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Vídeos Gerados</CardTitle>
+            <CardDescription>Vídeos que você gerou e estão prontos para publicação</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<div>Carregando vídeos...</div>}>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : pendingVideos.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {pendingVideos.map((video: any) => renderVideoCard(video))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Nenhum vídeo pendente encontrado.</p>
+                  <p className="text-sm mt-2">Gere novos vídeos na seção Designer para vê-los aqui.</p>
+                </div>
+              )}
+            </Suspense>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Vídeos Publicados</CardTitle>
+            <CardDescription>Vídeos que já foram publicados no TikTok</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<div>Carregando vídeos publicados...</div>}>
+              {isLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </div>
+              ) : publishedVideos.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {publishedVideos.map((video: any) => renderVideoCard(video, false))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <p>Nenhum vídeo publicado encontrado.</p>
+                  <p className="text-sm mt-2">Publique vídeos da aba "Pendentes" para vê-los aqui.</p>
+                </div>
+              )}
+            </Suspense>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Diálogo de confirmação de exclusão */}
