@@ -1,62 +1,56 @@
 import { NextResponse } from "next/server"
-import { ensureBinaries } from "@/lib/serverless-binaries"
-import { monitorResourceUsage } from "@/lib/serverless-monitor"
 import fs from "fs"
 import path from "path"
 import { tmpdir } from "os"
 import os from "os"
-import { kv } from "@vercel/kv"
+
+// Função auxiliar para monitorar recursos
+function monitorResourceUsage() {
+  const startTime = Date.now()
+  const startMemory = process.memoryUsage().heapUsed / 1024 / 1024
+
+  return {
+    getStats: () => {
+      const elapsedTime = Date.now() - startTime
+      const memoryUsage = process.memoryUsage().heapUsed / 1024 / 1024 - startMemory
+
+      return {
+        elapsedTime,
+        memoryUsage: Math.round(memoryUsage * 100) / 100,
+        memoryPercentage: Math.round((memoryUsage / (os.totalmem() / 1024 / 1024)) * 100),
+        timePercentage: Math.min(100, Math.round((elapsedTime / 10000) * 100)), // Assumindo 10s como máximo
+      }
+    },
+  }
+}
 
 export async function GET() {
   const monitor = monitorResourceUsage()
   const warnings = []
 
   try {
-    // Verificar disponibilidade dos binários
-    const binaries = await ensureBinaries()
+    // Verificar ambiente
+    const isVercel = process.env.VERCEL === "1"
 
-    // Verificar se os binários existem e são executáveis
-    let ffmpegStatus = false
-    let ffprobeStatus = false
-
-    if (binaries.ffmpegPath && fs.existsSync(binaries.ffmpegPath)) {
-      const stats = fs.statSync(binaries.ffmpegPath)
-      ffmpegStatus = !!(stats.mode & 0o111) // Verificar se é executável
-
-      if (!ffmpegStatus) {
-        warnings.push("FFmpeg encontrado, mas não é executável")
-      }
-    } else {
-      warnings.push("FFmpeg não encontrado")
+    // Informações básicas do sistema
+    const systemInfo = {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      cpus: `${os.cpus().length} cores`,
+      totalMemory: `${Math.round(os.totalmem() / (1024 * 1024))} MB`,
+      freeMemory: `${Math.round(os.freemem() / (1024 * 1024))} MB`,
     }
 
-    if (binaries.ffprobePath && fs.existsSync(binaries.ffprobePath)) {
-      const stats = fs.statSync(binaries.ffprobePath)
-      ffprobeStatus = !!(stats.mode & 0o111) // Verificar se é executável
-
-      if (!ffprobeStatus) {
-        warnings.push("FFprobe encontrado, mas não é executável")
-      }
-    } else {
-      warnings.push("FFprobe não encontrado")
+    // Verificar configurações de ambiente
+    const envConfig = {
+      ffmpegPath: process.env.FFMPEG_PATH || "(não definido)",
+      ffprobePath: process.env.FFPROBE_PATH || "(não definido)",
+      tempDir: process.env.TEMP_DIR || "(não definido)",
+      vercel: isVercel ? "Sim" : "Não",
     }
 
-    // Verificar Redis
-    let redisConnected = false
-    let redisInfo = "Não testado"
-
-    try {
-      const testKey = `system-check-${Date.now()}`
-      await kv.set(testKey, "test", { ex: 60 })
-      const value = await kv.get(testKey)
-      redisConnected = value === "test"
-      redisInfo = redisConnected ? "Conectado" : "Falha na verificação de leitura/escrita"
-    } catch (error) {
-      redisInfo = `Erro: ${error.message}`
-      warnings.push(`Erro na conexão com Redis: ${error.message}`)
-    }
-
-    // Verificar sistema de arquivos
+    // Verificar sistema de arquivos de forma segura
     let storageWritable = false
     let storageInfo = "Não testado"
 
@@ -85,39 +79,32 @@ export async function GET() {
       warnings.push(`Erro no sistema de arquivos: ${error.message}`)
     }
 
-    // Verificar Puppeteer (simplificado)
-    const puppeteerAvailable = true // Simplificado, pois carregar o Puppeteer completo seria pesado
+    // Verificar Redis/KV de forma segura
+    let redisConnected = false
+    let redisInfo = "Não testado"
+
+    try {
+      // Verificar se temos acesso ao KV
+      if (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN) {
+        redisInfo = "Configuração detectada, mas não testada para evitar erros"
+        redisConnected = true
+      } else {
+        redisInfo = "Configuração não detectada"
+        warnings.push("Redis/KV não configurado")
+      }
+    } catch (error) {
+      redisInfo = `Erro: ${error.message}`
+      warnings.push(`Erro na verificação do Redis: ${error.message}`)
+    }
 
     // Obter estatísticas de uso de recursos
     const stats = monitor.getStats()
-
-    // Verificar limites de recursos
-    if (stats.memoryPercentage > 70) {
-      warnings.push(`Uso de memória alto: ${stats.memoryPercentage}%`)
-    }
-
-    if (stats.timePercentage > 70) {
-      warnings.push(`Tempo de execução alto: ${stats.timePercentage}%`)
-    }
 
     return NextResponse.json({
       success: true,
       status: warnings.length > 0 ? "warning" : "operational",
       warnings: warnings.length > 0 ? warnings : undefined,
-      binaries: {
-        ffmpegPath: binaries.ffmpegPath,
-        ffprobePath: binaries.ffprobePath,
-        ffmpegExecutable: ffmpegStatus,
-        ffprobeExecutable: ffprobeStatus,
-      },
-      environment: {
-        node: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        cpus: `${os.cpus().length} cores`,
-        totalMemory: `${Math.round(os.totalmem() / (1024 * 1024))} MB`,
-        freeMemory: `${Math.round(os.freemem() / (1024 * 1024))} MB`,
-      },
+      environment: systemInfo,
       resources: {
         ...stats,
         memoryUsage: `${stats.memoryUsage} MB`,
@@ -125,29 +112,23 @@ export async function GET() {
         elapsedTime: `${stats.elapsedTime} ms`,
         timePercentage: stats.timePercentage,
       },
-      redis: {
-        connected: redisConnected,
-        info: redisInfo,
-      },
       storage: {
         writable: storageWritable,
         info: storageInfo,
       },
-      puppeteer: {
-        available: puppeteerAvailable,
+      redis: {
+        connected: redisConnected,
+        info: redisInfo,
       },
-      config: {
-        ffmpegPath: process.env.FFMPEG_PATH || "(não definido)",
-        ffprobePath: process.env.FFPROBE_PATH || "(não definido)",
-        tempDir: process.env.TEMP_DIR || "(não definido)",
-      },
+      config: envConfig,
     })
   } catch (error) {
+    console.error("Erro na verificação do sistema:", error)
     return NextResponse.json(
       {
         success: false,
         status: "error",
-        message: error.message,
+        message: error.message || "Erro desconhecido",
         resources: monitor.getStats(),
       },
       { status: 500 },

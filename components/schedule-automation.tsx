@@ -9,10 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
-import { CalendarIcon, Clock, Plus, Trash2, Loader2, Play, Pause } from "lucide-react"
+import { CalendarIcon, Clock, Plus, Trash2, Loader2, Play, Pause, AlertTriangle } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/use-toast"
 
@@ -27,6 +27,7 @@ export function ScheduleAutomation() {
   const [error, setError] = useState<string | null>(null)
   const [autoPublish, setAutoPublish] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
+  const [apiStatus, setApiStatus] = useState<"loading" | "error" | "success">("loading")
   const { toast } = useToast()
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export function ScheduleAutomation() {
     try {
       setIsLoading(true)
       setError(null)
+      setApiStatus("loading")
 
       const response = await fetch("/api/schedule")
 
@@ -46,9 +48,30 @@ export function ScheduleAutomation() {
 
       const data = await response.json()
       setSchedules(data.schedules || [])
+
+      // Verificar se há mensagem de ambiente simulado
+      if (data.message && data.message.includes("simulados")) {
+        toast({
+          title: "Modo simulado",
+          description: data.message,
+          variant: "default",
+        })
+      }
+
+      setApiStatus("success")
     } catch (err: any) {
       setError(err.message || "Failed to fetch schedules")
       console.error("Error fetching schedules:", err)
+      setApiStatus("error")
+
+      // Definir schedules como array vazio em caso de erro
+      setSchedules([])
+
+      toast({
+        variant: "destructive",
+        title: "Erro ao carregar agendamentos",
+        description: err.message || "Não foi possível carregar os agendamentos",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -98,6 +121,15 @@ export function ScheduleAutomation() {
 
         // Refresh schedules
         fetchSchedules()
+
+        // Verificar se há mensagem de ambiente simulado
+        if (data.message && data.message.includes("simulados")) {
+          toast({
+            title: "Modo simulado",
+            description: data.message,
+            variant: "default",
+          })
+        }
       } else {
         throw new Error(data.message || "Failed to create schedule")
       }
@@ -140,6 +172,15 @@ export function ScheduleAutomation() {
 
         // Refresh schedules
         fetchSchedules()
+
+        // Verificar se há mensagem de ambiente simulado
+        if (data.message && data.message.includes("simulados")) {
+          toast({
+            title: "Modo simulado",
+            description: data.message,
+            variant: "default",
+          })
+        }
       } else {
         throw new Error(data.message || "Failed to delete schedule")
       }
@@ -169,6 +210,16 @@ export function ScheduleAutomation() {
 
   return (
     <div className="grid grid-cols-1 gap-6">
+      {apiStatus === "error" && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Erro na API</AlertTitle>
+          <AlertDescription>
+            Não foi possível conectar à API de agendamentos. O sistema está operando em modo simulado.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card>
           <CardHeader>
@@ -217,7 +268,11 @@ export function ScheduleAutomation() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={handleAddSchedule} disabled={!date || isSubmitting} className="w-full">
+            <Button
+              onClick={handleAddSchedule}
+              disabled={!date || isSubmitting || apiStatus === "error"}
+              className="w-full"
+            >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -257,7 +312,12 @@ export function ScheduleAutomation() {
             </div>
           </CardContent>
           <CardFooter>
-            <Button onClick={toggleAutomation} variant={isRunning ? "destructive" : "default"} className="w-full">
+            <Button
+              onClick={toggleAutomation}
+              variant={isRunning ? "destructive" : "default"}
+              className="w-full"
+              disabled={apiStatus === "error"}
+            >
               {isRunning ? (
                 <>
                   <Pause className="mr-2 h-4 w-4" />
@@ -300,6 +360,20 @@ export function ScheduleAutomation() {
                 <span>Publicação automática:</span>
                 <span className={`font-medium ${autoPublish ? "text-green-500" : "text-yellow-500"}`}>
                   {autoPublish ? "Ativada" : "Desativada"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>API:</span>
+                <span
+                  className={`font-medium ${
+                    apiStatus === "success"
+                      ? "text-green-500"
+                      : apiStatus === "error"
+                        ? "text-red-500"
+                        : "text-yellow-500"
+                  }`}
+                >
+                  {apiStatus === "success" ? "Conectada" : apiStatus === "error" ? "Erro" : "Carregando..."}
                 </span>
               </div>
             </div>
@@ -374,7 +448,11 @@ export function ScheduleAutomation() {
           ) : (
             <div className="text-center py-8">
               <p className="text-muted-foreground">Nenhum agendamento encontrado</p>
-              <p className="text-sm text-muted-foreground mt-2">Crie um novo agendamento usando o formulário ao lado</p>
+              <p className="text-sm text-muted-foreground mt-2">
+                {apiStatus === "error"
+                  ? "A API de agendamentos está indisponível no momento"
+                  : "Crie um novo agendamento usando o formulário ao lado"}
+              </p>
             </div>
           )}
         </CardContent>
