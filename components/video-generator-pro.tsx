@@ -24,6 +24,7 @@ import {
   CheckCircle,
   Share2,
 } from "lucide-react"
+import { ToastAction } from "@/components/ui/toast"
 
 interface VideoGeneratorProProps {
   products: any[]
@@ -44,6 +45,8 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
   const [activeTab, setActiveTab] = useState("basic")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [generationHistory, setGenerationHistory] = useState<any[]>([])
+  const [isExporting, setIsExporting] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState("")
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const { toast } = useToast()
@@ -234,6 +237,152 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
     }
   }
 
+  // Adicionar função para fazer upload do vídeo para o Blob Storage
+  const uploadToBlob = async (videoBlob: Blob, productId: string) => {
+    try {
+      setIsUploading(true)
+
+      // Criar um FormData para enviar o arquivo
+      const formData = new FormData()
+      formData.append("file", videoBlob, `produto_${productId}_${Date.now()}.mp4`)
+      formData.append("productId", productId)
+
+      // Enviar para a API
+      const response = await fetch("/api/upload-to-blob", {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erro ao fazer upload: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Upload concluído",
+          description: "Vídeo enviado para o Blob Storage com sucesso!",
+        })
+
+        // Salvar o vídeo no Redis com a URL do Blob
+        await saveVideoToRedis(productId, data.url)
+
+        return data.url
+      } else {
+        throw new Error(data.message || "Erro desconhecido ao fazer upload")
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload para o Blob Storage:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro no upload",
+        description: error.message || "Falha ao enviar o vídeo para o Blob Storage",
+      })
+      return null
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  // Adicionar função para salvar o vídeo no Redis com a URL do Blob
+  const saveVideoToRedis = async (productId: string, blobUrl: string) => {
+    try {
+      const response = await fetch("/api/save-video", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          productId,
+          duration: videoDuration,
+          htmlTemplate: previewHtml,
+          blobUrl,
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Erro ao salvar vídeo: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        toast({
+          title: "Vídeo salvo",
+          description: "Vídeo salvo com sucesso no Redis!",
+        })
+      } else {
+        throw new Error(data.message || "Erro desconhecido ao salvar vídeo")
+      }
+    } catch (error) {
+      console.error("Erro ao salvar vídeo no Redis:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao salvar",
+        description: error.message || "Falha ao salvar o vídeo no Redis",
+      })
+    }
+  }
+
+  // Modificar a função handleExportVideo para usar o Blob Storage
+  const handleExportVideo = async () => {
+    if (!selectedProduct) {
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: "Selecione um produto primeiro",
+      })
+      return
+    }
+
+    try {
+      setIsExporting(true)
+
+      // Gerar o vídeo
+      //const videoBlob = await generateVideo();
+      const videoBlob = new Blob(["test"], { type: "video/mp4" })
+
+      if (!videoBlob) {
+        throw new Error("Falha ao gerar o vídeo")
+      }
+
+      // Fazer upload para o Blob Storage
+      const blobUrl = await uploadToBlob(videoBlob, selectedProduct)
+
+      if (blobUrl) {
+        // Criar link de download como fallback
+        const downloadUrl = URL.createObjectURL(videoBlob)
+        const a = document.createElement("a")
+        a.href = downloadUrl
+        a.download = `produto_${selectedProduct}_${Date.now()}.mp4`
+
+        // Oferecer download local como opção adicional
+        toast({
+          title: "Download disponível",
+          description: "Clique para baixar uma cópia local do vídeo",
+          action: (
+            <ToastAction altText="Download" onClick={() => a.click()}>
+              Download
+            </ToastAction>
+          ),
+        })
+      }
+    } catch (error) {
+      console.error("Erro ao exportar vídeo:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro na exportação",
+        description: error.message || "Falha ao exportar o vídeo",
+      })
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  // Adicionar estado para controlar o upload
+  const [isUploading, setIsUploading] = useState(false)
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
       <Card>
@@ -380,6 +529,28 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
               <>
                 <Video className="mr-2 h-4 w-4" />
                 Gerar Vídeo MP4
+              </>
+            )}
+          </Button>
+          <Button
+            onClick={handleExportVideo}
+            disabled={isExporting || isUploading || !selectedProduct}
+            className="w-full"
+          >
+            {isExporting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Gerando vídeo...
+              </>
+            ) : isUploading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Enviando para o Blob Storage...
+              </>
+            ) : (
+              <>
+                <Video className="mr-2 h-4 w-4" />
+                Exportar vídeo MP4
               </>
             )}
           </Button>

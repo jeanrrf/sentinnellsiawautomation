@@ -1,29 +1,16 @@
 import { Suspense } from "react"
-import { VideoGeneratorPro } from "@/components/video-generator-pro"
-import { getCachedProducts } from "@/lib/redis"
+import { AutoSearch } from "@/components/auto-search"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
-async function getProducts() {
-  try {
-    const products = await getCachedProducts()
-    return products || []
-  } catch (error) {
-    console.error("Erro ao buscar produtos:", error)
-    return []
-  }
-}
-
-export default async function BuscaPage() {
-  const products = await getProducts()
-
+export default function BuscaPage() {
   return (
     <div className="container mx-auto py-6">
-      <h1 className="text-3xl font-bold mb-6">Gerador de Vídeos para TikTok</h1>
+      <h1 className="text-3xl font-bold mb-6">Busca de Produtos da Shopee</h1>
 
-      <Suspense fallback={<div>Carregando produtos...</div>}>
-        <VideoGeneratorPro products={products} />
+      <Suspense fallback={<div>Carregando interface de busca...</div>}>
+        <AutoSearch />
       </Suspense>
     </div>
   )

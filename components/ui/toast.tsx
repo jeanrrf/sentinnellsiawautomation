@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useEffect, useState } from "react"
@@ -64,5 +66,27 @@ export function Toast({ id, title, description, variant = "default", onClose, cl
         </button>
       </div>
     </div>
+  )
+}
+
+export interface ToastActionProps {
+  altText: string
+  onClick?: () => void
+  className?: string
+  children?: React.ReactNode
+}
+
+export function ToastAction({ altText, onClick, className, children }: ToastActionProps) {
+  return (
+    <button
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+        className,
+      )}
+      onClick={onClick}
+    >
+      <span className="sr-only">{altText}</span>
+      {children}
+    </button>
   )
 }

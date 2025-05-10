@@ -478,4 +478,5 @@ export async function cleanupCache(): Promise<void> {
   }
 }
 
+export { redis }
 export default redis

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, RefreshCw, Trash2, Download, ExternalLink } from "lucide-react"
+import { Loader2, RefreshCw, Trash2, Download, ExternalLink, Eye } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/use-toast"
@@ -177,6 +177,12 @@ export function CacheViewer() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
+                            {/* Adicionar botão de visualização se tiver URL do Blob */}
+                            {video.blobUrl && (
+                              <Button variant="outline" size="sm" onClick={() => window.open(video.blobUrl, "_blank")}>
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button variant="outline" size="sm" onClick={() => handleDownloadVideo(video.id)}>
                               <Download className="h-4 w-4" />
                             </Button>
