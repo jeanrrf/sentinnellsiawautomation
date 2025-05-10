@@ -63,7 +63,13 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className="w-full justify-between">
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between", value ? "text-foreground" : "text-muted-foreground")}
+          aria-label="Selecione um produto"
+        >
           {isLoading ? (
             <div className="flex items-center">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -83,7 +89,12 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
       </PopoverTrigger>
       <PopoverContent className="w-full p-0" align="start">
         <Command>
-          <CommandInput placeholder="Buscar produto..." value={searchTerm} onValueChange={setSearchTerm} />
+          <CommandInput
+            placeholder="Buscar produto..."
+            value={searchTerm}
+            onValueChange={setSearchTerm}
+            aria-label="Buscar produto"
+          />
           <CommandList>
             <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
             <CommandGroup heading="Produtos">

@@ -25,28 +25,33 @@ import {
   Share2,
 } from "lucide-react"
 import { ToastAction } from "@/components/ui/toast"
+import { usePersistentState } from "@/hooks/use-persistent-state"
 
 interface VideoGeneratorProProps {
   products: any[]
 }
 
 export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
-  const [selectedProduct, setSelectedProduct] = useState("")
+  // Usar o hook de estado persistente para os estados importantes
+  const [selectedProduct, setSelectedProduct] = usePersistentState<string>("vgp_selectedProduct", "")
+  const [videoDuration, setVideoDuration] = usePersistentState<number>("vgp_videoDuration", 10)
+  const [videoStyle, setVideoStyle] = usePersistentState<string>("vgp_videoStyle", "portrait")
+  const [videoQuality, setVideoQuality] = usePersistentState<string>("vgp_videoQuality", "medium")
+  const [withAudio, setWithAudio] = usePersistentState<boolean>("vgp_withAudio", false)
+  const [optimize, setOptimize] = usePersistentState<boolean>("vgp_optimize", true)
+  const [fps, setFps] = usePersistentState<number>("vgp_fps", 30)
+  const [activeTab, setActiveTab] = usePersistentState<string>("vgp_activeTab", "basic")
+
+  // Estados que não precisam ser persistidos
   const [isGenerating, setIsGenerating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState<string | null>(null)
-  const [videoDuration, setVideoDuration] = useState(10)
-  const [videoStyle, setVideoStyle] = useState("portrait")
-  const [videoQuality, setVideoQuality] = useState("medium")
-  const [withAudio, setWithAudio] = useState(false)
-  const [optimize, setOptimize] = useState(true)
-  const [fps, setFps] = useState(30)
   const [generationStep, setGenerationStep] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState("basic")
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [generationHistory, setGenerationHistory] = useState<any[]>([])
   const [isExporting, setIsExporting] = useState(false)
   const [previewHtml, setPreviewHtml] = useState("")
+  const [isUploading, setIsUploading] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const { toast } = useToast()
@@ -72,6 +77,22 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       localStorage.setItem("videoGenerationHistory", JSON.stringify(generationHistory))
     }
   }, [generationHistory])
+
+  // Verificar se o produto selecionado existe nos produtos disponíveis
+  useEffect(() => {
+    if (selectedProduct && products.length > 0) {
+      const productExists = products.some((p) => p.itemId === selectedProduct)
+      if (!productExists) {
+        toast({
+          variant: "warning",
+          title: "Produto não encontrado",
+          description:
+            "O produto selecionado anteriormente não está mais disponível. Por favor, selecione outro produto.",
+        })
+        setSelectedProduct("")
+      }
+    }
+  }, [products, selectedProduct, setSelectedProduct, toast])
 
   const handleGenerateVideo = async () => {
     if (!selectedProduct) {
@@ -380,9 +401,6 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
     }
   }
 
-  // Adicionar estado para controlar o upload
-  const [isUploading, setIsUploading] = useState(false)
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
       <Card>
@@ -518,7 +536,7 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
             </AlertDescription>
           </Alert>
         </CardContent>
-        <CardFooter>
+        <CardFooter className="flex flex-col sm:flex-row gap-2">
           <Button onClick={handleGenerateVideo} disabled={!selectedProduct || isGenerating} className="w-full">
             {isGenerating ? (
               <>
