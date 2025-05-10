@@ -19,6 +19,7 @@ import {
   FileVideo,
   Settings,
   Terminal,
+  Info,
 } from "lucide-react"
 
 export function SystemStatusDashboard() {
@@ -28,28 +29,43 @@ export function SystemStatusDashboard() {
   const [activeTab, setActiveTab] = useState("overview")
   const [testResults, setTestResults] = useState<any>(null)
   const [isRunningTest, setIsRunningTest] = useState(false)
+  const [errorLogs, setErrorLogs] = useState<string[]>([])
 
   const checkSystemStatus = async () => {
     setIsChecking(true)
+    setErrorLogs([])
+
     try {
+      console.info("[SystemStatus] Verificando status do sistema...")
       const response = await fetch("/api/video-system-check")
+
+      if (!response.ok) {
+        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`)
+      }
+
       const data = await response.json()
+      console.info("[SystemStatus] Resposta recebida:", data)
 
       if (data.success) {
         if (data.warnings && data.warnings.length > 0) {
           setStatus("warning")
+          setErrorLogs((prev) => [...prev, ...data.warnings.map((w: any) => `AVISO: ${w.message || w}`)])
         } else {
           setStatus("operational")
         }
       } else {
         setStatus("error")
+        if (data.error) {
+          setErrorLogs((prev) => [...prev, `ERRO: ${data.error}`])
+        }
       }
 
       setDetails(data)
     } catch (error) {
-      console.error("Erro ao verificar status do sistema:", error)
+      console.error("[SystemStatus] Erro ao verificar status do sistema:", error)
       setStatus("error")
       setDetails({ error: error.message })
+      setErrorLogs((prev) => [...prev, `ERRO: ${error.message}`])
     } finally {
       setIsChecking(false)
     }
@@ -63,8 +79,15 @@ export function SystemStatusDashboard() {
     }))
 
     try {
+      console.info(`[SystemStatus] Testando componente: ${component}`)
       const response = await fetch(`/api/test-component?component=${component}`)
+
+      if (!response.ok) {
+        throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`)
+      }
+
       const data = await response.json()
+      console.info(`[SystemStatus] Resultado do teste de ${component}:`, data)
 
       setTestResults((prev: any) => ({
         ...prev,
@@ -72,9 +95,15 @@ export function SystemStatusDashboard() {
           status: data.success ? "success" : "error",
           message: data.message,
           details: data.details,
+          errorCode: data.errorCode,
         },
       }))
+
+      if (!data.success && data.message) {
+        setErrorLogs((prev) => [...prev, `ERRO (${component}): ${data.message}`])
+      }
     } catch (error) {
+      console.error(`[SystemStatus] Erro ao testar componente ${component}:`, error)
       setTestResults((prev: any) => ({
         ...prev,
         [component]: {
@@ -83,6 +112,7 @@ export function SystemStatusDashboard() {
           details: error.message,
         },
       }))
+      setErrorLogs((prev) => [...prev, `ERRO (${component}): ${error.message}`])
     } finally {
       setIsRunningTest(false)
     }
@@ -167,6 +197,22 @@ export function SystemStatusDashboard() {
                 status={details?.storage?.writable ? "operational" : "error"}
                 icon={<FileVideo className="h-4 w-4" />}
               />
+            </div>
+          )}
+
+          {errorLogs.length > 0 && (
+            <div className="mt-4">
+              <div className="text-sm font-medium mb-2 flex items-center gap-1">
+                <Info className="h-4 w-4" />
+                Logs de Erro
+              </div>
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-md text-xs font-mono max-h-40 overflow-y-auto">
+                {errorLogs.map((log, index) => (
+                  <div key={index} className="py-1 border-b border-gray-200 dark:border-gray-700 last:border-0">
+                    {log}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
@@ -278,6 +324,7 @@ export function SystemStatusDashboard() {
                   status={testResults?.ffmpeg?.status}
                   message={testResults?.ffmpeg?.message}
                   details={testResults?.ffmpeg?.details}
+                  errorCode={testResults?.ffmpeg?.errorCode}
                   onTest={() => runComponentTest("ffmpeg")}
                   isRunning={isRunningTest && testResults?.ffmpeg?.status === "running"}
                 />
@@ -288,6 +335,7 @@ export function SystemStatusDashboard() {
                   status={testResults?.puppeteer?.status}
                   message={testResults?.puppeteer?.message}
                   details={testResults?.puppeteer?.details}
+                  errorCode={testResults?.puppeteer?.errorCode}
                   onTest={() => runComponentTest("puppeteer")}
                   isRunning={isRunningTest && testResults?.puppeteer?.status === "running"}
                 />
@@ -298,6 +346,7 @@ export function SystemStatusDashboard() {
                   status={testResults?.redis?.status}
                   message={testResults?.redis?.message}
                   details={testResults?.redis?.details}
+                  errorCode={testResults?.redis?.errorCode}
                   onTest={() => runComponentTest("redis")}
                   isRunning={isRunningTest && testResults?.redis?.status === "running"}
                 />
@@ -308,6 +357,7 @@ export function SystemStatusDashboard() {
                   status={testResults?.storage?.status}
                   message={testResults?.storage?.message}
                   details={testResults?.storage?.details}
+                  errorCode={testResults?.storage?.errorCode}
                   onTest={() => runComponentTest("storage")}
                   isRunning={isRunningTest && testResults?.storage?.status === "running"}
                 />
@@ -364,6 +414,7 @@ export function SystemStatusDashboard() {
                       status={details.storage?.writable ? "success" : "error"}
                     />
                     <ConfigItem name="NODE_ENV" value={process.env.NODE_ENV || "development"} status="success" />
+                    <ConfigItem name="VERCEL" value={process.env.VERCEL === "1" ? "Sim" : "Não"} status="success" />
                   </div>
 
                   <Alert className="bg-blue-50 text-blue-800 border-blue-200">
@@ -374,6 +425,11 @@ export function SystemStatusDashboard() {
                     <AlertDescription className="text-sm">
                       Estas configurações são definidas através de variáveis de ambiente no projeto Vercel.
                       Certifique-se de que todas as variáveis necessárias estão configuradas corretamente.
+                      {process.env.VERCEL === "1" && (
+                        <div className="mt-2 font-medium">
+                          Ambiente Vercel detectado: Alguns testes serão executados em modo simulado.
+                        </div>
+                      )}
                     </AlertDescription>
                   </Alert>
                 </div>
@@ -462,6 +518,7 @@ function TestItem({
   status,
   message,
   details,
+  errorCode,
   onTest,
   isRunning,
 }: {
@@ -469,7 +526,8 @@ function TestItem({
   description: string
   status: string
   message: string
-  details?: string
+  details?: any
+  errorCode?: string
   onTest: () => void
   isRunning: boolean
 }) {
@@ -506,7 +564,21 @@ function TestItem({
         <div className="mb-3 text-sm">
           <div className="font-medium">Resultado:</div>
           <div className="mt-1">{message}</div>
-          {details && <div className="mt-1 text-xs text-gray-500 break-all">{details}</div>}
+          {errorCode && (
+            <div className="mt-1 text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded inline-block">
+              Código: {errorCode}
+            </div>
+          )}
+          {details && typeof details === "object" && (
+            <div className="mt-2 text-xs">
+              <details className="cursor-pointer">
+                <summary className="font-medium">Detalhes técnicos</summary>
+                <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-700 rounded overflow-auto max-h-32">
+                  {JSON.stringify(details, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
         </div>
       )}
 

@@ -26,12 +26,21 @@ import {
 } from "lucide-react"
 import { ToastAction } from "@/components/ui/toast"
 import { usePersistentState } from "@/hooks/use-persistent-state"
+import { createLogger, ErrorCodes } from "@/lib/logger"
+
+// Create a module-specific logger
+const logger = createLogger("VideoGeneratorPro")
 
 interface VideoGeneratorProProps {
   products: any[]
 }
 
 export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
+  // Log component initialization
+  logger.debug("Component initializing", {
+    context: { productsCount: products?.length || 0 },
+  })
+
   // Usar o hook de estado persistente para os estados importantes
   const [selectedProduct, setSelectedProduct] = usePersistentState<string>("vgp_selectedProduct", "")
   const [videoDuration, setVideoDuration] = usePersistentState<number>("vgp_videoDuration", 10)
@@ -68,15 +77,23 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
     if (typeof window === "undefined") return
 
     try {
+      logger.debug("Loading generation history from localStorage")
       const savedHistory = localStorage.getItem("videoGenerationHistory")
       if (savedHistory) {
         const parsedHistory = JSON.parse(savedHistory)
         if (Array.isArray(parsedHistory)) {
           setGenerationHistory(parsedHistory)
+          logger.info("Generation history loaded successfully", {
+            context: { historyCount: parsedHistory.length },
+          })
         }
       }
     } catch (e) {
-      console.error("Erro ao carregar histórico:", e)
+      logger.error("Failed to load generation history", {
+        code: ErrorCodes.STORAGE.READ_FAILED,
+        details: e,
+        context: { source: "localStorage", key: "videoGenerationHistory" },
+      })
     }
   }, [])
 
@@ -86,9 +103,16 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
     if (generationHistory.length > 0) {
       try {
+        logger.debug("Saving generation history to localStorage", {
+          context: { historyCount: generationHistory.length },
+        })
         localStorage.setItem("videoGenerationHistory", JSON.stringify(generationHistory))
       } catch (e) {
-        console.error("Erro ao salvar histórico:", e)
+        logger.error("Failed to save generation history", {
+          code: ErrorCodes.STORAGE.WRITE_FAILED,
+          details: e,
+          context: { source: "localStorage", key: "videoGenerationHistory" },
+        })
       }
     }
   }, [generationHistory])
@@ -103,19 +127,21 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
     // Marcar que os produtos foram carregados
     setProductsLoaded(true)
+    logger.info("Products loaded", { context: { count: products.length } })
 
     // Verificar se o produto selecionado existe
     if (selectedProduct) {
-      console.log("Verificando produto:", selectedProduct)
-      console.log(
-        "Produtos disponíveis:",
-        products.map((p) => p.itemId),
-      )
+      logger.debug("Validating selected product", {
+        context: { selectedProduct, availableProducts: products.length },
+      })
 
       const productExists = products.some((p) => p.itemId === selectedProduct)
 
       if (!productExists) {
-        console.log("Produto não encontrado na lista:", selectedProduct)
+        logger.warning("Selected product not found in available products", {
+          code: ErrorCodes.VALIDATION.NOT_FOUND,
+          context: { selectedProduct },
+        })
 
         // Mostrar alerta apenas uma vez
         setShowProductNotFoundAlert(true)
@@ -131,7 +157,9 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
             "O produto selecionado anteriormente não está mais disponível. Por favor, selecione outro produto.",
         })
       } else {
-        console.log("Produto encontrado na lista:", selectedProduct)
+        logger.debug("Selected product validated successfully", {
+          context: { selectedProduct, productName: products.find((p) => p.itemId === selectedProduct)?.productName },
+        })
         setShowProductNotFoundAlert(false)
       }
     }
@@ -143,6 +171,10 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
   const handleGenerateVideo = async () => {
     if (!selectedProduct) {
+      logger.warning("Attempted to generate video without selecting a product", {
+        code: ErrorCodes.VALIDATION.REQUIRED_FIELD,
+      })
+
       toast({
         variant: "destructive",
         title: "Erro",
@@ -150,6 +182,18 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       })
       return
     }
+
+    logger.info("Starting video generation", {
+      context: {
+        productId: selectedProduct,
+        duration: videoDuration,
+        style: videoStyle,
+        quality: videoQuality,
+        withAudio,
+        optimize,
+        fps,
+      },
+    })
 
     setIsGenerating(true)
     setProgress(0)
@@ -169,8 +213,10 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
     try {
       // Atualizar etapa
       setGenerationStep("Renderizando card e convertendo para vídeo...")
+      logger.debug("Rendering card and converting to video")
 
       // Fazer a requisição para gerar o vídeo
+      logger.debug("Sending API request to generate video")
       const response = await fetch("/api/generate-product-video", {
         method: "POST",
         headers: {
@@ -189,10 +235,20 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
       if (!response.ok) {
         const errorData = await response.json()
+        logger.error("Video generation API request failed", {
+          code: ErrorCodes.VIDEO.GENERATION_FAILED,
+          details: errorData,
+          context: {
+            status: response.status,
+            statusText: response.statusText,
+            productId: selectedProduct,
+          },
+        })
         throw new Error(errorData.message || "Erro ao gerar vídeo")
       }
 
       // Obter o blob do vídeo
+      logger.debug("Receiving video blob from API")
       const videoBlob = await response.blob()
 
       // Criar URL para o blob
@@ -214,6 +270,15 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         quality: videoQuality,
       }
 
+      logger.info("Video generated successfully", {
+        context: {
+          productId: selectedProduct,
+          productName: selectedProductInfo?.productName,
+          blobSize: videoBlob.size,
+          duration: videoDuration,
+        },
+      })
+
       setGenerationHistory((prev) => [newHistoryItem, ...prev.slice(0, 9)]) // Manter apenas os 10 mais recentes
 
       toast({
@@ -221,7 +286,15 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         description: "Você pode visualizar e baixar o vídeo agora",
       })
     } catch (error) {
-      console.error("Erro ao gerar vídeo:", error)
+      logger.error("Error during video generation", {
+        code: ErrorCodes.VIDEO.GENERATION_FAILED,
+        details: error,
+        context: {
+          productId: selectedProduct,
+          step: generationStep,
+        },
+      })
+
       toast({
         variant: "destructive",
         title: "Erro ao gerar vídeo",
@@ -231,27 +304,62 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       clearInterval(progressInterval)
       setTimeout(() => {
         setIsGenerating(false)
+        logger.debug("Video generation process completed")
       }, 500)
     }
   }
 
   const handleDownloadVideo = () => {
-    if (!videoUrl) return
+    if (!videoUrl) {
+      logger.warning("Attempted to download video without a valid URL", {
+        code: ErrorCodes.VALIDATION.REQUIRED_FIELD,
+      })
+      return
+    }
 
-    const a = document.createElement("a")
-    a.href = videoUrl
-    a.download = `produto-${selectedProduct}-${Date.now()}.mp4`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
+    logger.info("Downloading video", {
+      context: { productId: selectedProduct },
+    })
+
+    try {
+      const a = document.createElement("a")
+      a.href = videoUrl
+      a.download = `produto-${selectedProduct}-${Date.now()}.mp4`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+
+      logger.info("Video download initiated successfully")
+    } catch (error) {
+      logger.error("Failed to download video", {
+        code: ErrorCodes.STORAGE.BLOB_DOWNLOAD_FAILED,
+        details: error,
+      })
+
+      toast({
+        variant: "destructive",
+        title: "Erro ao baixar vídeo",
+        description: "Não foi possível iniciar o download do vídeo",
+      })
+    }
   }
 
   const handleShareVideo = async () => {
-    if (!videoUrl) return
+    if (!videoUrl) {
+      logger.warning("Attempted to share video without a valid URL", {
+        code: ErrorCodes.VALIDATION.REQUIRED_FIELD,
+      })
+      return
+    }
+
+    logger.info("Attempting to share video", {
+      context: { productId: selectedProduct },
+    })
 
     try {
       // Verificar se a API de compartilhamento está disponível
       if (navigator.share) {
+        logger.debug("Web Share API is available, preparing file for sharing")
         const blob = await fetch(videoUrl).then((r) => r.blob())
         const file = new File([blob], `produto-${selectedProduct}.mp4`, { type: "video/mp4" })
 
@@ -261,12 +369,18 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
           files: [file],
         })
 
+        logger.info("Video shared successfully via Web Share API")
         toast({
           title: "Vídeo compartilhado",
           description: "O vídeo foi compartilhado com sucesso",
         })
       } else {
         // Fallback se a API de compartilhamento não estiver disponível
+        logger.warning("Web Share API not available, falling back to download", {
+          code: ErrorCodes.SYSTEM.DEPENDENCY_MISSING,
+          context: { feature: "Web Share API" },
+        })
+
         handleDownloadVideo()
         toast({
           title: "Compartilhamento não suportado",
@@ -274,7 +388,12 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         })
       }
     } catch (error) {
-      console.error("Erro ao compartilhar:", error)
+      logger.error("Error sharing video", {
+        code: ErrorCodes.SYSTEM.UNEXPECTED_ERROR,
+        details: error,
+        context: { productId: selectedProduct },
+      })
+
       toast({
         variant: "destructive",
         title: "Erro ao compartilhar",
@@ -284,9 +403,18 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
   }
 
   const loadHistoryItem = (item: any) => {
+    logger.info("Loading history item", {
+      context: {
+        historyItemId: item.id,
+        productId: item.productId,
+      },
+    })
+
     // Encontrar o produto pelo ID
     const product = products.find((p) => p.itemId === item.productId)
     if (product) {
+      logger.debug("Product found in available products, loading configuration")
+
       setSelectedProduct(item.productId)
       setVideoDuration(item.duration)
       setVideoStyle(item.style)
@@ -297,6 +425,11 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         description: `Configurações para "${product.productName}" carregadas`,
       })
     } else {
+      logger.warning("Product from history not found in available products", {
+        code: ErrorCodes.VALIDATION.NOT_FOUND,
+        context: { productId: item.productId },
+      })
+
       toast({
         variant: "destructive",
         title: "Produto não encontrado",
@@ -307,6 +440,14 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
   // Adicionar função para fazer upload do vídeo para o Blob Storage
   const uploadToBlob = async (videoBlob: Blob, productId: string) => {
+    logger.info("Starting upload to Blob Storage", {
+      context: {
+        productId,
+        blobSize: videoBlob.size,
+        blobType: videoBlob.type,
+      },
+    })
+
     try {
       setIsUploading(true)
 
@@ -316,18 +457,35 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       formData.append("productId", productId)
 
       // Enviar para a API
+      logger.debug("Sending upload request to API")
       const response = await fetch("/api/upload-to-blob", {
         method: "POST",
         body: formData,
       })
 
       if (!response.ok) {
+        logger.error("Blob upload API request failed", {
+          code: ErrorCodes.STORAGE.BLOB_UPLOAD_FAILED,
+          context: {
+            status: response.status,
+            statusText: response.statusText,
+            productId,
+          },
+        })
+
         throw new Error(`Erro ao fazer upload: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
 
       if (data.success) {
+        logger.info("Upload to Blob Storage completed successfully", {
+          context: {
+            productId,
+            blobUrl: data.url,
+          },
+        })
+
         toast({
           title: "Upload concluído",
           description: "Vídeo enviado para o Blob Storage com sucesso!",
@@ -338,10 +496,21 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
         return data.url
       } else {
+        logger.error("Blob upload failed with error from API", {
+          code: ErrorCodes.STORAGE.BLOB_UPLOAD_FAILED,
+          details: data,
+          context: { productId },
+        })
+
         throw new Error(data.message || "Erro desconhecido ao fazer upload")
       }
     } catch (error) {
-      console.error("Erro ao fazer upload para o Blob Storage:", error)
+      logger.error("Error uploading to Blob Storage", {
+        code: ErrorCodes.STORAGE.BLOB_UPLOAD_FAILED,
+        details: error,
+        context: { productId },
+      })
+
       toast({
         variant: "destructive",
         title: "Erro no upload",
@@ -355,6 +524,14 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
   // Adicionar função para salvar o vídeo no Redis com a URL do Blob
   const saveVideoToRedis = async (productId: string, blobUrl: string) => {
+    logger.info("Saving video metadata to Redis", {
+      context: {
+        productId,
+        blobUrl,
+        duration: videoDuration,
+      },
+    })
+
     try {
       const response = await fetch("/api/save-video", {
         method: "POST",
@@ -370,21 +547,43 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       })
 
       if (!response.ok) {
+        logger.error("Save video API request failed", {
+          code: ErrorCodes.CACHE.SET_FAILED,
+          context: {
+            status: response.status,
+            statusText: response.statusText,
+            productId,
+          },
+        })
+
         throw new Error(`Erro ao salvar vídeo: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
 
       if (data.success) {
+        logger.info("Video metadata saved to Redis successfully")
+
         toast({
           title: "Vídeo salvo",
           description: "Vídeo salvo com sucesso no Redis!",
         })
       } else {
+        logger.error("Save video failed with error from API", {
+          code: ErrorCodes.CACHE.SET_FAILED,
+          details: data,
+          context: { productId },
+        })
+
         throw new Error(data.message || "Erro desconhecido ao salvar vídeo")
       }
     } catch (error) {
-      console.error("Erro ao salvar vídeo no Redis:", error)
+      logger.error("Error saving video to Redis", {
+        code: ErrorCodes.CACHE.SET_FAILED,
+        details: error,
+        context: { productId },
+      })
+
       toast({
         variant: "destructive",
         title: "Erro ao salvar",
@@ -396,6 +595,10 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
   // Modificar a função handleExportVideo para usar o Blob Storage
   const handleExportVideo = async () => {
     if (!selectedProduct) {
+      logger.warning("Attempted to export video without selecting a product", {
+        code: ErrorCodes.VALIDATION.REQUIRED_FIELD,
+      })
+
       toast({
         variant: "destructive",
         title: "Erro",
@@ -404,21 +607,39 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       return
     }
 
+    logger.info("Starting video export process", {
+      context: { productId: selectedProduct },
+    })
+
     try {
       setIsExporting(true)
 
       // Gerar o vídeo
       //const videoBlob = await generateVideo();
+      logger.debug("Creating test video blob")
       const videoBlob = new Blob(["test"], { type: "video/mp4" })
 
       if (!videoBlob) {
+        logger.error("Failed to generate video blob", {
+          code: ErrorCodes.VIDEO.GENERATION_FAILED,
+          context: { productId: selectedProduct },
+        })
+
         throw new Error("Falha ao gerar o vídeo")
       }
 
       // Fazer upload para o Blob Storage
+      logger.debug("Uploading video to Blob Storage")
       const blobUrl = await uploadToBlob(videoBlob, selectedProduct)
 
       if (blobUrl) {
+        logger.info("Video exported successfully", {
+          context: {
+            productId: selectedProduct,
+            blobUrl,
+          },
+        })
+
         // Criar link de download como fallback
         const downloadUrl = URL.createObjectURL(videoBlob)
         const a = document.createElement("a")
@@ -437,7 +658,12 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
         })
       }
     } catch (error) {
-      console.error("Erro ao exportar vídeo:", error)
+      logger.error("Error exporting video", {
+        code: ErrorCodes.VIDEO.GENERATION_FAILED,
+        details: error,
+        context: { productId: selectedProduct },
+      })
+
       toast({
         variant: "destructive",
         title: "Erro na exportação",
@@ -447,6 +673,15 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
       setIsExporting(false)
     }
   }
+
+  // Log component render
+  logger.debug("Component rendering", {
+    context: {
+      selectedProduct: selectedProduct || "none",
+      productsLoaded,
+      videoGenerated: !!videoUrl,
+    },
+  })
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
@@ -478,6 +713,12 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                   products={products}
                   value={selectedProduct}
                   onChange={(value) => {
+                    logger.debug("Product selection changed", {
+                      context: {
+                        previousProduct: selectedProduct,
+                        newProduct: value,
+                      },
+                    })
                     setSelectedProduct(value)
                     setShowProductNotFoundAlert(false)
                   }}
@@ -497,7 +738,15 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
               <div className="space-y-2">
                 <Label htmlFor="videoStyle">Estilo do Vídeo</Label>
-                <Select value={videoStyle} onValueChange={setVideoStyle}>
+                <Select
+                  value={videoStyle}
+                  onValueChange={(value) => {
+                    logger.debug("Video style changed", {
+                      context: { previousStyle: videoStyle, newStyle: value },
+                    })
+                    setVideoStyle(value)
+                  }}
+                >
                   <SelectTrigger id="videoStyle">
                     <SelectValue placeholder="Selecione o estilo do vídeo" />
                   </SelectTrigger>
@@ -519,7 +768,12 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                   max={15}
                   step={1}
                   value={[videoDuration]}
-                  onValueChange={(value) => setVideoDuration(value[0])}
+                  onValueChange={(value) => {
+                    logger.debug("Video duration changed", {
+                      context: { previousDuration: videoDuration, newDuration: value[0] },
+                    })
+                    setVideoDuration(value[0])
+                  }}
                 />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>5s</span>
@@ -530,10 +784,29 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
               <div className="flex items-center justify-between">
                 <Label htmlFor="withAudio">Incluir Áudio (Música de Fundo)</Label>
-                <Switch id="withAudio" checked={withAudio} onCheckedChange={setWithAudio} />
+                <Switch
+                  id="withAudio"
+                  checked={withAudio}
+                  onCheckedChange={(checked) => {
+                    logger.debug("Audio setting changed", {
+                      context: { previousValue: withAudio, newValue: checked },
+                    })
+                    setWithAudio(checked)
+                  }}
+                />
               </div>
 
-              <Button variant="outline" size="sm" className="w-full" onClick={() => setShowAdvanced(!showAdvanced)}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  logger.debug("Advanced settings visibility toggled", {
+                    context: { previousValue: showAdvanced, newValue: !showAdvanced },
+                  })
+                  setShowAdvanced(!showAdvanced)
+                }}
+              >
                 <Settings className="mr-2 h-4 w-4" />
                 {showAdvanced ? "Ocultar Configurações Avançadas" : "Mostrar Configurações Avançadas"}
               </Button>
@@ -542,7 +815,15 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
             <TabsContent value="advanced" className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="videoQuality">Qualidade do Vídeo</Label>
-                <Select value={videoQuality} onValueChange={setVideoQuality}>
+                <Select
+                  value={videoQuality}
+                  onValueChange={(value) => {
+                    logger.debug("Video quality changed", {
+                      context: { previousQuality: videoQuality, newQuality: value },
+                    })
+                    setVideoQuality(value)
+                  }}
+                >
                   <SelectTrigger id="videoQuality">
                     <SelectValue placeholder="Selecione a qualidade do vídeo" />
                   </SelectTrigger>
@@ -558,7 +839,19 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                 <div className="flex justify-between items-center">
                   <Label htmlFor="fps">Taxa de Quadros (FPS): {fps}</Label>
                 </div>
-                <Slider id="fps" min={24} max={60} step={1} value={[fps]} onValueChange={(value) => setFps(value[0])} />
+                <Slider
+                  id="fps"
+                  min={24}
+                  max={60}
+                  step={1}
+                  value={[fps]}
+                  onValueChange={(value) => {
+                    logger.debug("FPS changed", {
+                      context: { previousFps: fps, newFps: value[0] },
+                    })
+                    setFps(value[0])
+                  }}
+                />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>24 fps</span>
                   <span>30 fps</span>
@@ -568,7 +861,16 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
               <div className="flex items-center justify-between">
                 <Label htmlFor="optimize">Otimizar para Redes Sociais</Label>
-                <Switch id="optimize" checked={optimize} onCheckedChange={setOptimize} />
+                <Switch
+                  id="optimize"
+                  checked={optimize}
+                  onCheckedChange={(checked) => {
+                    logger.debug("Optimization setting changed", {
+                      context: { previousValue: optimize, newValue: checked },
+                    })
+                    setOptimize(checked)
+                  }}
+                />
               </div>
 
               <Alert variant="info" className="mt-4">
@@ -728,6 +1030,7 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
                     size="sm"
                     className="w-full mt-2"
                     onClick={() => {
+                      logger.info("Clearing generation history")
                       localStorage.removeItem("videoGenerationHistory")
                       setGenerationHistory([])
                       toast({

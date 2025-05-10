@@ -1,106 +1,80 @@
-import { put, list, del } from "@vercel/blob"
-import { CACHE_KEYS } from "./constants"
+import { put, del } from "@vercel/blob"
+import { createLogger, ErrorCodes } from "./logger"
 
-// Função para fazer upload de um vídeo para o Blob Storage
-export async function uploadVideoToBlob(videoBuffer: Buffer, productId: string, format = "mp4") {
+const logger = createLogger("BlobStorage")
+
+// Function to upload a video to Vercel Blob Storage
+export async function uploadVideo(buffer: Buffer, filename: string): Promise<string | null> {
+  logger.debug("Starting upload to Blob Storage", {
+    context: { filename },
+  })
+
   try {
-    const filename = `video_${productId}_${Date.now()}.${format}`
-    const blob = await put(filename, videoBuffer, {
+    // Upload the file
+    const blob = await put(filename, buffer, {
       access: "public",
-      contentType: `video/${format}`,
-      addRandomSuffix: true,
     })
 
-    console.log(`Video uploaded to Blob Storage: ${blob.url}`)
-    return {
-      success: true,
-      url: blob.url,
-      filename: blob.pathname,
-    }
+    logger.info("Upload to Blob Storage completed successfully", {
+      context: { url: blob.url },
+    })
+
+    return blob.url
   } catch (error) {
-    console.error("Error uploading video to Blob Storage:", error)
-    return {
-      success: false,
-      error: error.message || "Unknown error",
-    }
+    logger.error("Failed to upload to Blob Storage", {
+      code: ErrorCodes.STORAGE.BLOB_UPLOAD_FAILED,
+      details: error,
+    })
+    return null
   }
 }
 
-// Função para listar todos os vídeos no Blob Storage
-export async function listVideosFromBlob(prefix = CACHE_KEYS.VIDEO_PREFIX) {
+// Function to upload a video to Vercel Blob Storage
+export async function uploadVideoToBlob(
+  buffer: Buffer,
+  productId: string,
+): Promise<{ success: boolean; url?: string; filename?: string; error?: string }> {
+  const filename = `produto_${productId}_${Date.now()}.mp4`
+  logger.debug("Starting upload to Blob Storage", {
+    context: { filename },
+  })
+
   try {
-    const { blobs } = await list({ prefix })
-    return {
-      success: true,
-      videos: blobs.map((blob) => ({
-        url: blob.url,
-        filename: blob.pathname,
-        size: blob.size,
-        uploadedAt: blob.uploadedAt,
-      })),
-    }
-  } catch (error) {
-    console.error("Error listing videos from Blob Storage:", error)
-    return {
-      success: false,
-      error: error.message || "Unknown error",
-      videos: [],
-    }
+    // Upload the file
+    const blob = await put(filename, buffer, {
+      access: "public",
+    })
+
+    logger.info("Upload to Blob Storage completed successfully", {
+      context: { url: blob.url },
+    })
+
+    return { success: true, url: blob.url, filename: filename }
+  } catch (error: any) {
+    logger.error("Failed to upload to Blob Storage", {
+      code: ErrorCodes.STORAGE.BLOB_UPLOAD_FAILED,
+      details: error,
+    })
+    return { success: false, error: error.message }
   }
 }
 
-// Função para excluir um vídeo do Blob Storage
-export async function deleteVideoFromBlob(url: string) {
+// Function to delete a video from Vercel Blob Storage
+export async function deleteVideo(url: string): Promise<void> {
+  logger.debug("Starting deletion from Blob Storage", {
+    context: { url },
+  })
+
   try {
     await del(url)
-    console.log(`Video deleted from Blob Storage: ${url}`)
-    return {
-      success: true,
-    }
+    logger.info("Deletion from Blob Storage completed successfully", {
+      context: { url },
+    })
   } catch (error) {
-    console.error("Error deleting video from Blob Storage:", error)
-    return {
-      success: false,
-      error: error.message || "Unknown error",
-    }
+    logger.error("Failed to delete from Blob Storage", {
+      code: ErrorCodes.STORAGE.DELETE_FAILED,
+      details: error,
+    })
+    throw error
   }
 }
-
-// Função para limpar todos os vídeos do Blob Storage
-export async function cleanupBlobStorage(prefix = CACHE_KEYS.VIDEO_PREFIX) {
-  try {
-    const { videos } = await listVideosFromBlob(prefix)
-
-    if (!videos || videos.length === 0) {
-      return {
-        success: true,
-        message: "No videos to clean up",
-        count: 0,
-      }
-    }
-
-    const deletePromises = videos.map((video) => deleteVideoFromBlob(video.url))
-    const results = await Promise.all(deletePromises)
-
-    const successCount = results.filter((result) => result.success).length
-
-    return {
-      success: true,
-      message: `Deleted ${successCount} of ${videos.length} videos`,
-      count: successCount,
-    }
-  } catch (error) {
-    console.error("Error cleaning up Blob Storage:", error)
-    return {
-      success: false,
-      error: error.message || "Unknown error",
-      count: 0,
-    }
-  }
-}
-
-// Alias para compatibilidade com código existente
-export const uploadVideo = uploadVideoToBlob
-
-// Alias para compatibilidade com código existente
-export const deleteVideo = deleteVideoFromBlob
