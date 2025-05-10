@@ -275,7 +275,7 @@ async function testRedis() {
   try {
     // Verificar se as variáveis de ambiente do Redis estão definidas
     const redisUrl = process.env.REDIS_URL || process.env.KV_REST_API_URL || process.env.KV_URL
-    const redisToken = process.env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN
+    const redisToken = process.env.KV_REST_API_TOKEN || process.env.KV_REST_API_READ_ONLY_TOKEN
 
     if (!redisUrl || !redisToken) {
       logger.warning("Configuração Redis incompleta", {
@@ -323,6 +323,17 @@ async function testRedis() {
       logger.error("Erro ao conectar com Redis", {
         code: ErrorCodes.CACHE.CONNECTION_FAILED,
         details: redisError,
+      })
+
+      return NextResponse.json({
+        success: false,
+        message: "Erro ao conectar com Redis",
+        details: {
+          configured: !!(redisUrl && redisToken),
+          url: redisUrl ? "Configurado" : "Não configurado",
+          token: redisToken ? "Configurado" : "Não configurado",
+          error: redisError.message || "Erro desconhecido",
+        },
       })
     }
 

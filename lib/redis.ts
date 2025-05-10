@@ -15,10 +15,11 @@ interface VideoData {
 
 export const CACHE_KEYS = {
   PRODUCTS: "shopee:products",
-  DESCRIPTION_PREFIX: "shopee:description",
+  PRODUCT_PREFIX: "shopee:product:", // Adicionando prefixo para produtos individuais
+  DESCRIPTION_PREFIX: "shopee:description:",
   PROCESSED_IDS: "shopee:processed_ids",
   VIDEOS: "shopee:videos",
-  VIDEO_PREFIX: "shopee:video",
+  VIDEO_PREFIX: "shopee:video:",
   PUBLISHED_VIDEOS: "shopee:published_videos",
   EXCLUDED_PRODUCTS: "shopee:excluded_products", // Produtos que não devem ser buscados novamente
 }
@@ -33,16 +34,40 @@ export const CACHE_TTL = {
   VIDEOS: 60 * 60 * 24 * 30, // 30 days for videos
 }
 
-// Criar cliente Redis usando variáveis de ambiente
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || process.env.REDIS_URL || "",
-  token: process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "",
-})
+// Função para criar e retornar o cliente Redis
+export function getRedisClient() {
+  try {
+    // Criar cliente Redis usando variáveis de ambiente
+    const client = new Redis({
+      url: process.env.KV_REST_API_URL || process.env.KV_REST_API_URL || process.env.REDIS_URL || "",
+      token: process.env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || "",
+    })
+
+    return client
+  } catch (error) {
+    console.error("Erro ao criar cliente Redis:", error)
+    throw new Error(`Falha ao inicializar Redis: ${error.message}`)
+  }
+}
+
+// Criar uma instância do cliente Redis
+const redis = getRedisClient()
 
 // Função para obter produtos em cache
 export async function getCachedProducts() {
   try {
     const products = await redis.get(CACHE_KEYS.PRODUCTS)
+
+    // Se products for uma string, tente fazer o parse para JSON
+    if (typeof products === "string") {
+      try {
+        return JSON.parse(products)
+      } catch (parseError) {
+        console.error("Erro ao fazer parse dos produtos em cache:", parseError)
+        return []
+      }
+    }
+
     return products || []
   } catch (error) {
     console.error("Error getting cached products:", error)
@@ -53,7 +78,29 @@ export async function getCachedProducts() {
 // Função para obter um produto específico do cache
 export async function getCachedProduct(productId: string) {
   try {
+    // Primeiro, tente obter o produto diretamente pela chave individual
+    const product = await redis.get(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
+
+    if (product) {
+      // Se for uma string, tente fazer o parse
+      if (typeof product === "string") {
+        try {
+          return JSON.parse(product)
+        } catch (parseError) {
+          console.error(`Erro ao fazer parse do produto ${productId}:`, parseError)
+        }
+      } else {
+        return product
+      }
+    }
+
+    // Se não encontrar, tente buscar na lista completa
     const products = await getCachedProducts()
+    if (!Array.isArray(products)) {
+      console.warn("Produtos em cache não é um array:", typeof products)
+      return null
+    }
+
     return products.find((p: any) => p.itemId === productId) || null
   } catch (error) {
     console.error(`Error getting cached product ${productId}:`, error)
@@ -64,7 +111,7 @@ export async function getCachedProduct(productId: string) {
 // Função para obter descrição em cache
 export async function getCachedDescription(productId: string) {
   try {
-    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}:${productId}`
+    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`
     const description = await redis.get(key)
     return description || null
   } catch (error) {
@@ -86,7 +133,7 @@ export async function cacheDescription(productId: string, description: string): 
 export async function clearCache() {
   try {
     // Obter todas as chaves
-    const keys = await redis.keys("*")
+    const keys = await redis.keys("shopee:*")
 
     // Excluir cada chave
     for (const key of keys) {
@@ -103,10 +150,13 @@ export async function clearCache() {
 // Adicionando as funções que estavam faltando
 export async function createCacheEntry(key: string, value: any, ttl?: number): Promise<void> {
   try {
+    // Garantir que estamos armazenando uma string
+    const valueToStore = typeof value === "string" ? value : JSON.stringify(value)
+
     if (ttl) {
-      await redis.set(key, JSON.stringify(value), { ex: ttl })
+      await redis.set(key, valueToStore, { ex: ttl })
     } else {
-      await redis.set(key, JSON.stringify(value))
+      await redis.set(key, valueToStore)
     }
     console.log(`Cache entry created for key: ${key}`)
   } catch (error) {
@@ -132,12 +182,12 @@ export async function getCacheEntry(key: string): Promise<any | null> {
         return JSON.parse(cachedData)
       } catch (parseError) {
         console.error("Error parsing cached data:", parseError)
-        return null
+        return cachedData // Retornar o valor bruto se não for possível fazer o parse
       }
     }
 
     console.error("Unexpected cached data format:", typeof cachedData)
-    return null
+    return cachedData // Retornar o valor como está
   } catch (error) {
     console.error("Error getting cached data:", error)
     return null
@@ -146,6 +196,11 @@ export async function getCacheEntry(key: string): Promise<any | null> {
 
 export async function cacheProducts(products: any[]): Promise<void> {
   try {
+    if (!Array.isArray(products)) {
+      console.error("Produtos não é um array:", typeof products)
+      return
+    }
+
     // Verificar produtos excluídos antes de cachear
     const excludedProducts = await getExcludedProducts()
 
@@ -213,7 +268,7 @@ export async function addExcludedProduct(productId: string): Promise<void> {
 
     // Remover o produto da lista de produtos
     const products = await getCachedProducts()
-    if (products) {
+    if (products && Array.isArray(products)) {
       const updatedProducts = products.filter((p) => p.itemId !== productId)
       await redis.set(CACHE_KEYS.PRODUCTS, JSON.stringify(updatedProducts), { ex: CACHE_TTL.PRODUCTS })
     }
