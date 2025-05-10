@@ -20,7 +20,7 @@ type ToastContextType = {
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined)
 
-// Criar uma variável para armazenar a função toast fora do contexto
+// Função toast global para uso fora de componentes React
 let toastFn: (props: ToastProps) => void = () => {
   console.warn("Toast function called before it was initialized")
 }
@@ -28,19 +28,20 @@ let toastFn: (props: ToastProps) => void = () => {
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastProps[]>([])
 
-  const toast = (props: ToastProps) => {
+  const handleToast = (props: ToastProps) => {
     const id = Math.random().toString(36).substring(2, 9)
     setToasts((prev) => [...prev, { ...props, id }])
-    // Atualizar a referência global à função toast
-    toastFn = toast
   }
+
+  // Atualizar a referência global à função toast
+  toastFn = handleToast
 
   const removeToast = (id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id))
   }
 
   return (
-    <ToastContext.Provider value={{ toast }}>
+    <ToastContext.Provider value={{ toast: handleToast }}>
       {children}
       <div className="fixed bottom-0 right-0 p-4 space-y-4 z-50">
         {toasts.map((toast) => (
