@@ -33,6 +33,25 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
   // Texto a ser exibido no botão
   const buttonText = selectedProduct ? truncateProductName(selectedProduct.productName) : "Selecione um produto"
 
+  const handleSelectChange = (newValue: string) => {
+    console.log("Produto selecionado:", newValue)
+
+    // Verificar se o produto existe na lista
+    const productExists = products.some((p) => p.itemId === newValue)
+    if (!productExists && newValue) {
+      console.warn("Produto selecionado não encontrado na lista:", newValue)
+    }
+
+    onChange(newValue)
+
+    // Salvar a seleção no localStorage para persistência
+    try {
+      localStorage.setItem("selectedProductId", newValue)
+    } catch (error) {
+      console.error("Erro ao salvar produto no localStorage:", error)
+    }
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -57,7 +76,7 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
                   key={product.itemId}
                   value={product.itemId}
                   onSelect={() => {
-                    onChange(product.itemId === value ? "" : product.itemId)
+                    handleSelectChange(product.itemId === value ? "" : product.itemId)
                     setOpen(false)
                   }}
                 >

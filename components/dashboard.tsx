@@ -16,6 +16,7 @@ export function Dashboard() {
   const pathname = usePathname()
   const [activeTab, setActiveTab] = useState("designer")
   const [isLoading, setIsLoading] = useState(true)
+  const [products, setProducts] = useState([]) // Assuming you have a products state
 
   // Determinar a aba ativa com base no pathname
   useEffect(() => {
@@ -36,6 +37,22 @@ export function Dashboard() {
     setIsLoading(false)
   }, [pathname])
 
+  useEffect(() => {
+    // Simulate fetching products (replace with your actual data fetching logic)
+    const fetchProducts = async () => {
+      // Example:
+      // const data = await fetch('/api/products');
+      // const products = await data.json();
+      // setProducts(products);
+      setProducts([
+        { id: 1, name: "Product 1" },
+        { id: 2, name: "Product 2" },
+      ]) // Example data
+    }
+
+    fetchProducts()
+  }, [])
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
@@ -52,7 +69,8 @@ export function Dashboard() {
       case "search":
         return <AutoSearch />
       case "designer":
-        return <DesignerExport />
+        console.log("Dashboard renderizando com", products.length, "produtos")
+        return <DesignerExport products={products.length > 0 ? products : []} />
       case "automation":
         return <ScheduleAutomation />
       case "publication":
@@ -80,7 +98,8 @@ export function Dashboard() {
           </Card>
         )
       default:
-        return <DesignerExport />
+        console.log("Dashboard renderizando com", products.length, "produtos")
+        return <DesignerExport products={products.length > 0 ? products : []} />
     }
   }
 

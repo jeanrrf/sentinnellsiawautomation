@@ -28,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
+import { VideoRecorder } from "@/components/video-recorder"
 
 interface VideoGeneratorProps {
   products: any[]
@@ -47,6 +48,10 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
   const [previewError, setPreviewError] = useState(false)
   const [previewMode, setPreviewMode] = useState<"standard" | "tiktok">("tiktok")
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [recordingDuration, setRecordingDuration] = useState(5)
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null)
+  const [videoUrl, setVideoUrl] = useState<string>("")
+
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
@@ -67,13 +72,17 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       if (previewContainerRef.current) {
         previewContainerRef.current.innerHTML = ""
       }
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl)
+      }
     }
-  }, [])
+  }, [videoUrl])
 
   // Renderizar o preview de forma isolada
   useEffect(() => {
     if (htmlTemplate && previewContainerRef.current) {
       try {
+        console.log("Renderizando preview do card no container")
         // Limpar o conteúdo anterior
         previewContainerRef.current.innerHTML = ""
 
@@ -95,6 +104,9 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
             iframe.contentDocument.open()
             iframe.contentDocument.write(htmlTemplate)
             iframe.contentDocument.close()
+            console.log("Preview renderizado com sucesso")
+          } else {
+            console.error("contentDocument não disponível no iframe")
           }
         }
 
@@ -106,6 +118,8 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
         console.error("Error rendering preview:", error)
         setPreviewError(true)
       }
+    } else if (htmlTemplate) {
+      console.log("previewContainerRef não está disponível para renderizar o preview")
     }
   }, [htmlTemplate])
 
@@ -210,6 +224,9 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       const productInfo = products.find((p) => p.itemId === selectedProduct)
       if (productInfo) {
         console.log("Informações do produto:", productInfo.productName)
+      } else {
+        console.error("Produto não encontrado na lista:", selectedProduct)
+        throw new Error("Produto não encontrado na lista de produtos")
       }
 
       setGenerationStep("Buscando informações do produto...")
@@ -227,9 +244,11 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       let description = ""
       if (!useAI) {
         description = customDescription
+        console.log("Usando descrição personalizada:", description)
       } else {
         try {
           // Tentar obter descrição da API
+          console.log("Solicitando descrição da API para o produto:", selectedProduct)
           const descResponse = await fetch("/api/generate-description", {
             method: "POST",
             headers: {
@@ -241,19 +260,24 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
           if (descResponse.ok) {
             const descData = await descResponse.json()
             description = descData.description
+            console.log("Descrição gerada com sucesso:", description)
           } else {
+            console.error("Erro ao gerar descrição. Status:", descResponse.status)
             // Fallback para descrição local
             description = createFallbackDescription(product)
+            console.log("Usando descrição de fallback:", description)
           }
         } catch (error) {
           console.error("Error generating description:", error)
           description = createFallbackDescription(product)
+          console.log("Usando descrição de fallback após erro:", description)
         }
       }
 
       setGenerationStep("Renderizando template...")
 
       // Gerar o HTML do template localmente
+      console.log("Renderizando template HTML para o produto:", selectedProduct)
       const html = renderProductCardTemplate(product, description, videoStyle)
       setHtmlTemplate(html)
 
@@ -270,6 +294,14 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       // Definir o modo de preview para TikTok por padrão
       setPreviewMode("tiktok")
 
+      // Limpar qualquer vídeo anterior
+      if (videoUrl) {
+        URL.revokeObjectURL(videoUrl)
+        setVideoUrl("")
+        setVideoBlob(null)
+      }
+
+      console.log("Card gerado com sucesso para o produto:", selectedProduct)
       toast({
         title: "Card gerado com sucesso",
         description: "Você pode visualizar o card na aba de preview",
@@ -281,7 +313,7 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       toast({
         variant: "destructive",
         title: "Erro ao gerar o card",
-        description: error.message,
+        description: error.message || "Ocorreu um erro desconhecido ao gerar o card",
       })
     } finally {
       stopProgress()
@@ -356,6 +388,17 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
       description: "O arquivo HTML do card foi baixado",
       icon: <CheckCircle className="h-4 w-4 text-green-500" />,
     })
+  }
+
+  const handleRecordingComplete = (blob: Blob, url: string) => {
+    setVideoBlob(blob)
+    setVideoUrl(url)
+
+    // Mudar para a aba de vídeo automaticamente
+    setActiveTab("video")
+
+    // Salvar o vídeo no servidor (opcional)
+    // saveVideoToServer(blob, selectedProduct)
   }
 
   const toggleFullscreen = () => {
@@ -451,6 +494,24 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
               </Select>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="recordingDuration">Duração do Vídeo (segundos)</Label>
+              <Select
+                value={recordingDuration.toString()}
+                onValueChange={(value) => setRecordingDuration(Number(value))}
+              >
+                <SelectTrigger id="recordingDuration">
+                  <SelectValue placeholder="Selecione a duração" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="3">3 segundos</SelectItem>
+                  <SelectItem value="5">5 segundos</SelectItem>
+                  <SelectItem value="7">7 segundos</SelectItem>
+                  <SelectItem value="10">10 segundos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {isGenerating && (
               <div className="space-y-2 mt-4">
                 <div className="flex justify-between text-sm">
@@ -462,7 +523,12 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
             )}
           </CardContent>
           <CardFooter>
-            <Button onClick={handleGenerate} disabled={!selectedProduct || isGenerating} className="w-full">
+            <Button
+              onClick={handleGenerate}
+              disabled={!selectedProduct || isGenerating}
+              className="w-full relative"
+              variant={selectedProduct ? "default" : "outline"}
+            >
               {isGenerating ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -471,7 +537,7 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
               ) : (
                 <>
                   <Video className="mr-2 h-4 w-4" />
-                  Gerar Card
+                  {selectedProduct ? "Gerar Card" : "Selecione um produto"}
                 </>
               )}
             </Button>
@@ -520,6 +586,7 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
             <TabsList className="w-full flex-shrink-0">
               <TabsTrigger value="preview">Preview</TabsTrigger>
+              <TabsTrigger value="video">Vídeo</TabsTrigger>
               <TabsTrigger value="html">HTML</TabsTrigger>
             </TabsList>
 
@@ -631,6 +698,42 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
               )}
             </TabsContent>
 
+            <TabsContent value="video" className="p-4">
+              {htmlTemplate ? (
+                <div className="flex flex-col items-center">
+                  <VideoRecorder
+                    htmlContent={htmlTemplate}
+                    productId={selectedProduct}
+                    duration={recordingDuration}
+                    onRecordingComplete={handleRecordingComplete}
+                  />
+
+                  {videoUrl && (
+                    <div className="mt-4 text-center text-sm text-muted-foreground">
+                      <p>Vídeo gerado com sucesso! Você pode baixá-lo e usá-lo no TikTok.</p>
+                      <p className="mt-2">
+                        <strong>Dica:</strong> O vídeo está no formato WebM, que é compatível com o TikTok. Se precisar
+                        converter para MP4, você pode usar ferramentas online gratuitas como o{" "}
+                        <a
+                          href="https://cloudconvert.com/webm-to-mp4"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline"
+                        >
+                          CloudConvert
+                        </a>
+                        .
+                      </p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-12">
+                  <p>Gere um card primeiro para criar um vídeo</p>
+                </div>
+              )}
+            </TabsContent>
+
             <TabsContent value="html" className="p-4">
               {htmlTemplate ? (
                 <div className="flex flex-col gap-4">
@@ -662,9 +765,13 @@ export function VideoGenerator({ products }: VideoGeneratorProps) {
             <Download className="mr-2 h-4 w-4" />
             Baixar HTML
           </Button>
-          <Button disabled={!previewUrl} onClick={handleTakeScreenshot}>
-            <Camera className="mr-2 h-4 w-4" />
-            Tirar Screenshot
+          <Button
+            disabled={!htmlTemplate}
+            onClick={() => setActiveTab("video")}
+            variant={activeTab === "video" ? "default" : "outline"}
+          >
+            <Video className="mr-2 h-4 w-4" />
+            Gravar Vídeo
           </Button>
         </CardFooter>
       </Card>
@@ -697,8 +804,13 @@ function renderProductCardTemplate(product: any, description: string, style = "p
 
   console.log(`Rendering template for product: ${product.itemId} with style: ${style}`)
 
+  // Garantir que temos valores válidos para todos os campos necessários
+  const productName = product.productName || "Produto sem nome"
+  const imageUrl = product.imageUrl || "/diverse-products-still-life.png"
+  const offerLink = product.offerLink || "#"
+
   // Usar o preço original calculado ou o preço atual se não houver desconto
-  const currentPrice = Number.parseFloat(product.price)
+  const currentPrice = Number.parseFloat(product.price || "0")
   const originalPrice = product.calculatedOriginalPrice ? Number.parseFloat(product.calculatedOriginalPrice) : null
 
   // Calcular a porcentagem de desconto se tivermos o preço original
@@ -709,6 +821,13 @@ function renderProductCardTemplate(product: any, description: string, style = "p
     // Ou usar diretamente a taxa de desconto da API
     discountPercentage = Math.round(Number.parseFloat(product.priceDiscountRate))
   }
+
+  // Garantir que temos uma descrição válida
+  const safeDescription = description || "Descrição não disponível"
+
+  // Garantir que temos valores válidos para avaliação e vendas
+  const ratingStar = product.ratingStar || "4.5"
+  const sales = product.sales || "0"
 
   // Configurações de estilo baseadas no formato escolhido
   const styleConfig = getStyleConfig(style)
@@ -939,10 +1058,10 @@ function renderProductCardTemplate(product: any, description: string, style = "p
     <div class="sm-logo">Sales Martins</div>
     
     <div class="sm-card">
-      <h1 class="sm-product-title">${product.productName}</h1>
+      <h1 class="sm-product-title">${productName}</h1>
       
       <div class="sm-product-image-container">
-        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image" />
+        <img src="${imageUrl}" alt="${productName}" class="sm-product-image" />
       </div>
       
       <div class="sm-price-container">
@@ -951,13 +1070,13 @@ function renderProductCardTemplate(product: any, description: string, style = "p
         ${discountPercentage ? `<span class="sm-discount-badge">-${discountPercentage}%</span>` : ""}
       </div>
       
-      <p class="sm-product-description">${description}</p>
+      <p class="sm-product-description">${safeDescription}</p>
       
       <p class="sm-product-info">
-        <span class="sm-star-rating">★★★★★</span> ${product.ratingStar || "4.5"} | Vendas: ${product.sales}+
+        <span class="sm-star-rating">★★★★★</span> ${ratingStar || "4.5"} | Vendas: ${sales}+
       </p>
       
-      <a href="${product.offerLink}" target="_blank" class="sm-buy-button">COMPRAR AGORA</a>
+      <a href="${offerLink}" target="_blank" class="sm-buy-button">COMPRAR AGORA</a>
     </div>
   </div>
 </body>

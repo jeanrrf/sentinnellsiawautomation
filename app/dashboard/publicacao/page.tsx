@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, ExternalLink, Copy, Trash2, AlertCircle, Download } from "lucide-react"
+import { Loader2, Copy, Trash2, AlertCircle, Download, Video, HelpCircle } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,6 +16,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 
 export default function PublicacaoPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -30,10 +39,14 @@ export default function PublicacaoPage() {
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [videoToDelete, setVideoToDelete] = useState<any>(null)
+  const [showVideoDialog, setShowVideoDialog] = useState(false)
+  const [currentVideo, setCurrentVideo] = useState<any>(null)
+  const [showHelpDialog, setShowHelpDialog] = useState(false)
   const { toast } = useToast()
 
   // Referências para os iframes de vídeo
   const videoRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
+  const videoDialogRef = useRef<HTMLDivElement | null>(null)
 
   // Buscar vídeos ao carregar a página
   useEffect(() => {
@@ -44,6 +57,13 @@ export default function PublicacaoPage() {
   useEffect(() => {
     renderVideos()
   }, [pendingVideos, publishedVideos])
+
+  // Renderizar o vídeo no diálogo quando ele é aberto
+  useEffect(() => {
+    if (showVideoDialog && currentVideo && videoDialogRef.current) {
+      renderVideoInDialog()
+    }
+  }, [showVideoDialog, currentVideo])
 
   // Função para buscar vídeos
   const fetchVideos = async () => {
@@ -127,6 +147,45 @@ export default function PublicacaoPage() {
           <p class="text-muted-foreground text-center text-xs">Erro ao carregar vídeo</p>
         </div>`
       }
+    }
+  }
+
+  // Função para renderizar o vídeo no diálogo
+  const renderVideoInDialog = () => {
+    if (!videoDialogRef.current || !currentVideo || !currentVideo.htmlTemplate) return
+
+    // Limpar o container
+    videoDialogRef.current.innerHTML = ""
+
+    try {
+      // Criar um iframe para o vídeo
+      const iframe = document.createElement("iframe")
+      iframe.style.width = "100%"
+      iframe.style.height = "100%"
+      iframe.style.border = "none"
+      iframe.style.overflow = "hidden"
+      iframe.title = currentVideo.productName || "Video Preview"
+      iframe.sandbox.add("allow-same-origin")
+
+      // Adicionar ao container
+      videoDialogRef.current.appendChild(iframe)
+
+      // Escrever o conteúdo no iframe
+      iframe.onload = () => {
+        if (iframe.contentDocument) {
+          iframe.contentDocument.open()
+          iframe.contentDocument.write(currentVideo.htmlTemplate)
+          iframe.contentDocument.close()
+        }
+      }
+
+      // Iniciar o carregamento
+      iframe.src = "about:blank"
+    } catch (error) {
+      console.error(`Erro ao renderizar vídeo no diálogo:`, error)
+      videoDialogRef.current.innerHTML = `<div class="flex items-center justify-center h-full bg-muted">
+        <p class="text-muted-foreground text-center">Erro ao carregar vídeo</p>
+      </div>`
     }
   }
 
@@ -235,26 +294,27 @@ export default function PublicacaoPage() {
     }
   }
 
-  // Função para baixar o vídeo em MP4
+  // Função para baixar o vídeo como HTML
   const handleDownloadVideo = async (productId: string) => {
     try {
       setIsDownloading(true)
       setDownloadingId(productId)
 
-      // Iniciar o download do vídeo
-      const downloadUrl = `/api/videos/${productId}/download`
+      // Iniciar o download do vídeo como HTML
+      const downloadUrl = `/api/videos/${productId}/download?format=html`
 
       // Criar um link temporário para download
       const link = document.createElement("a")
       link.href = downloadUrl
-      link.download = `shopee_product_${productId}.mp4`
+      link.download = `shopee_product_${productId}.html`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
 
       toast({
         title: "Download iniciado",
-        description: "O vídeo está sendo baixado em formato MP4",
+        description:
+          "O arquivo HTML está sendo baixado. Abra-o em um navegador e use uma ferramenta de captura de tela para criar o vídeo MP4.",
         className: "bg-green-100 border-green-500 text-green-800",
       })
     } catch (error: any) {
@@ -274,41 +334,10 @@ export default function PublicacaoPage() {
     }
   }
 
-  // Função para visualizar o vídeo em uma nova janela
-  const openPreviewInNewWindow = (videoUrl: string) => {
-    if (!videoUrl) return
-
-    // Criar uma nova janela com o tamanho adequado
-    const width = 1080
-    const height = 1920
-
-    // Ajustar para caber na tela
-    const screenWidth = window.screen.width
-    const screenHeight = window.screen.height
-
-    let adjustedWidth = width
-    let adjustedHeight = height
-
-    if (width > screenWidth * 0.9) {
-      const ratio = width / height
-      adjustedWidth = Math.floor(screenWidth * 0.9)
-      adjustedHeight = Math.floor(adjustedWidth / ratio)
-    }
-
-    if (adjustedHeight > screenHeight * 0.9) {
-      const ratio = width / height
-      adjustedHeight = Math.floor(screenHeight * 0.9)
-      adjustedWidth = Math.floor(adjustedHeight * ratio)
-    }
-
-    const left = Math.floor((screenWidth - adjustedWidth) / 2)
-    const top = Math.floor((screenHeight - adjustedHeight) / 2)
-
-    window.open(
-      videoUrl,
-      "preview",
-      `width=${adjustedWidth},height=${adjustedHeight},left=${left},top=${top},resizable=yes,scrollbars=yes`,
-    )
+  // Função para abrir o diálogo de vídeo
+  const openVideoDialog = (video: any) => {
+    setCurrentVideo(video)
+    setShowVideoDialog(true)
   }
 
   // Função para copiar o link do vídeo
@@ -378,13 +407,8 @@ export default function PublicacaoPage() {
               )}
             </div>
             <div className="mt-auto pt-2 flex gap-2 flex-wrap">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-7"
-                onClick={() => openPreviewInNewWindow(video.videoUrl)}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
+              <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => openVideoDialog(video)}>
+                <Video className="h-3 w-3 mr-1" />
                 Visualizar
               </Button>
               <Button
@@ -399,7 +423,7 @@ export default function PublicacaoPage() {
                 ) : (
                   <Download className="h-3 w-3 mr-1" />
                 )}
-                Baixar MP4
+                Baixar HTML
               </Button>
               <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => copyVideoLink(video.videoUrl)}>
                 <Copy className="h-3 w-3 mr-1" />
@@ -444,9 +468,86 @@ export default function PublicacaoPage() {
   return (
     <div className="container mx-auto py-6">
       <div className="flex flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-bold">Publicação de Vídeos</h1>
-          <p className="text-muted-foreground">Gerencie e publique seus vídeos do TikTok</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold">Publicação de Vídeos</h1>
+            <p className="text-muted-foreground">Gerencie e publique seus vídeos do TikTok</p>
+          </div>
+          <Dialog open={showHelpDialog} onOpenChange={setShowHelpDialog}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-1">
+                <HelpCircle className="h-4 w-4" />
+                Como criar MP4
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Como converter HTML em vídeo MP4</DialogTitle>
+                <DialogDescription>
+                  Siga estas etapas para criar um vídeo MP4 a partir do arquivo HTML baixado.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <h3 className="font-medium">Opção 1: Usando OBS Studio (Gratuito)</h3>
+                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
+                    <li>
+                      Baixe e instale o{" "}
+                      <a
+                        href="https://obsproject.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline"
+                      >
+                        OBS Studio
+                      </a>
+                    </li>
+                    <li>Abra o arquivo HTML baixado em seu navegador</li>
+                    <li>No OBS, adicione uma fonte "Captura de Janela" e selecione a janela do navegador</li>
+                    <li>Ajuste o tamanho para capturar apenas o conteúdo do vídeo</li>
+                    <li>Clique em "Iniciar Gravação" e grave por 5-10 segundos</li>
+                    <li>Clique em "Parar Gravação" e o vídeo será salvo no formato MP4</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-medium">Opção 2: Usando ScreenToGif (Gratuito, Windows)</h3>
+                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
+                    <li>
+                      Baixe e instale o{" "}
+                      <a
+                        href="https://www.screentogif.com/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline"
+                      >
+                        ScreenToGif
+                      </a>
+                    </li>
+                    <li>Abra o arquivo HTML baixado em seu navegador</li>
+                    <li>Abra o ScreenToGif e selecione "Gravador de Tela"</li>
+                    <li>Ajuste a área de captura para cobrir apenas o conteúdo do vídeo</li>
+                    <li>Clique em "Gravar" e grave por 5-10 segundos</li>
+                    <li>Clique em "Parar" e salve o arquivo como MP4</li>
+                  </ol>
+                </div>
+                <div className="space-y-2">
+                  <h3 className="font-medium">Opção 3: Usando QuickTime (Mac)</h3>
+                  <ol className="ml-6 list-decimal text-sm text-muted-foreground space-y-2">
+                    <li>Abra o arquivo HTML baixado em seu navegador</li>
+                    <li>Abra o QuickTime Player e selecione "Arquivo {">"} Nova Gravação de Tela"</li>
+                    <li>Selecione a área do navegador que contém o vídeo</li>
+                    <li>Clique em "Gravar" e grave por 5-10 segundos</li>
+                    <li>Clique no botão de parar e salve o arquivo</li>
+                  </ol>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => setShowHelpDialog(false)}>
+                  Entendi
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
 
         <Tabs defaultValue="pending" className="w-full">
@@ -523,6 +624,35 @@ export default function PublicacaoPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Diálogo de visualização de vídeo */}
+      <Dialog open={showVideoDialog} onOpenChange={setShowVideoDialog}>
+        <DialogContent className="max-w-[90vw] max-h-[90vh] w-auto h-auto">
+          <DialogHeader>
+            <DialogTitle>{currentVideo?.productName || "Visualização do Vídeo"}</DialogTitle>
+            <DialogDescription>Visualize o vídeo e use o botão "Baixar HTML" para salvá-lo.</DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-center items-center">
+            <div ref={videoDialogRef} className="w-full" style={{ aspectRatio: "9/16", maxHeight: "70vh" }}></div>
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setShowVideoDialog(false)}>
+              Fechar
+            </Button>
+            <Button
+              onClick={() => currentVideo && handleDownloadVideo(currentVideo.productId)}
+              disabled={isDownloading && downloadingId === currentVideo?.productId}
+            >
+              {isDownloading && downloadingId === currentVideo?.productId ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Baixar HTML
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

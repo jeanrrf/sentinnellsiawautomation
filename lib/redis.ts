@@ -1,5 +1,38 @@
 import { Redis } from "@upstash/redis"
 
+interface VideoData {
+  id: string
+  productId: string
+  productName: string
+  imageUrl: string
+  price: string
+  duration: number
+  createdAt: string
+  status: string
+  videoUrl: string
+  htmlTemplate: string
+}
+
+export const CACHE_KEYS = {
+  PRODUCTS: "shopee:products",
+  DESCRIPTION_PREFIX: "shopee:description",
+  PROCESSED_IDS: "shopee:processed_ids",
+  VIDEOS: "shopee:videos",
+  VIDEO_PREFIX: "shopee:video",
+  PUBLISHED_VIDEOS: "shopee:published_videos",
+  EXCLUDED_PRODUCTS: "shopee:excluded_products", // Produtos que não devem ser buscados novamente
+}
+
+// Cache TTLs in seconds
+export const CACHE_TTL = {
+  PRODUCTS: 60 * 60, // 1 hour
+  DESCRIPTIONS: 60 * 60 * 24, // 24 hours
+  PROCESSED_IDS: 60 * 60 * 24 * 7, // 7 days
+  PUBLISHED_VIDEOS: 60 * 60 * 24 * 30, // 30 days
+  EXCLUDED_PRODUCTS: 60 * 60 * 24 * 90, // 90 days (produtos que não devem ser buscados novamente)
+  VIDEOS: 60 * 60 * 24 * 30, // 30 days for videos
+}
+
 // Create Redis client with better error handling
 let redis: Redis
 
@@ -27,32 +60,54 @@ try {
     smembers: async () => [],
     srem: async () => 0,
     del: async () => 0,
+    smove: async () => 1,
   } as unknown as Redis
 }
 
-// Cache TTLs in seconds
-export const CACHE_TTL = {
-  PRODUCTS: 60 * 60, // 1 hour
-  DESCRIPTIONS: 60 * 60 * 24, // 24 hours
-  PROCESSED_IDS: 60 * 60 * 24 * 7, // 7 days
-  PUBLISHED_VIDEOS: 60 * 60 * 24 * 30, // 30 days
-  EXCLUDED_PRODUCTS: 60 * 60 * 24 * 90, // 90 days (produtos que não devem ser buscados novamente)
-  VIDEOS: 60 * 60 * 24 * 30, // 30 days for videos
+// Adicionando as funções que estavam faltando
+export async function createCacheEntry(key: string, value: any, ttl?: number): Promise<void> {
+  try {
+    if (ttl) {
+      await redis.set(key, JSON.stringify(value), { ex: ttl })
+    } else {
+      await redis.set(key, JSON.stringify(value))
+    }
+    console.log(`Cache entry created for key: ${key}`)
+  } catch (error) {
+    console.error(`Error creating cache entry for key ${key}:`, error)
+  }
 }
 
-// Cache keys
-export const CACHE_KEYS = {
-  PRODUCTS: "shopee:products",
-  DESCRIPTION_PREFIX: "shopee:description:",
-  PROCESSED_IDS: "shopee:processed_ids",
-  PRODUCT_PREFIX: "shopee:product:",
-  VIDEOS: "shopee:videos",
-  VIDEO_PREFIX: "shopee:video:",
-  PUBLISHED_VIDEOS: "shopee:published_videos",
-  EXCLUDED_PRODUCTS: "shopee:excluded_products", // Produtos que não devem ser buscados novamente
+export async function getCacheEntry(key: string): Promise<any | null> {
+  try {
+    const cachedData = await redis.get(key)
+
+    if (!cachedData) return null
+
+    // Handle the case where the data might already be an object
+    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
+      console.log("Cached data is already an object, returning directly")
+      return cachedData
+    }
+
+    // If it's a string, parse it
+    if (typeof cachedData === "string") {
+      try {
+        return JSON.parse(cachedData)
+      } catch (parseError) {
+        console.error("Error parsing cached data:", parseError)
+        return null
+      }
+    }
+
+    console.error("Unexpected cached data format:", typeof cachedData)
+    return null
+  } catch (error) {
+    console.error("Error getting cached data:", error)
+    return null
+  }
 }
 
-// Cache utility functions with error handling
 export async function cacheProducts(products: any[]): Promise<void> {
   try {
     // Verificar produtos excluídos antes de cachear
