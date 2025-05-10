@@ -5,7 +5,17 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
-import { Loader2, ExternalLink, Copy } from "lucide-react"
+import { Loader2, ExternalLink, Copy, Trash2, AlertCircle, Download } from "lucide-react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function PublicacaoPage() {
   const [isLoading, setIsLoading] = useState(true)
@@ -14,6 +24,12 @@ export default function PublicacaoPage() {
   const [error, setError] = useState("")
   const [isPublishing, setIsPublishing] = useState(false)
   const [publishingId, setPublishingId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const [videoToDelete, setVideoToDelete] = useState<any>(null)
   const { toast } = useToast()
 
   // Referências para os iframes de vídeo
@@ -163,7 +179,102 @@ export default function PublicacaoPage() {
     }
   }
 
-  // Função para abrir o preview em uma nova janela
+  // Função para confirmar exclusão de vídeo
+  const confirmDeleteVideo = (video: any) => {
+    setVideoToDelete(video)
+    setShowDeleteDialog(true)
+  }
+
+  // Função para excluir um vídeo
+  const handleDeleteVideo = async () => {
+    if (!videoToDelete) return
+
+    try {
+      setIsDeleting(true)
+      setDeletingId(videoToDelete.productId)
+
+      const response = await fetch("/api/videos/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ productId: videoToDelete.productId }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`Falha ao excluir vídeo: ${response.status}`)
+      }
+
+      const data = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.message || "Falha ao excluir vídeo")
+      }
+
+      // Atualizar a lista de vídeos pendentes
+      setPendingVideos((prev) => prev.filter((video: any) => video.productId !== videoToDelete.productId))
+
+      toast({
+        title: "Vídeo excluído com sucesso",
+        description: "O vídeo foi removido permanentemente",
+        className: "bg-green-100 border-green-500 text-green-800",
+      })
+    } catch (error: any) {
+      console.error("Erro ao excluir vídeo:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir vídeo",
+        description: error.message,
+        className: "bg-red-100 border-red-500 text-red-800",
+      })
+    } finally {
+      setIsDeleting(false)
+      setDeletingId(null)
+      setShowDeleteDialog(false)
+      setVideoToDelete(null)
+    }
+  }
+
+  // Função para baixar o vídeo em MP4
+  const handleDownloadVideo = async (productId: string) => {
+    try {
+      setIsDownloading(true)
+      setDownloadingId(productId)
+
+      // Iniciar o download do vídeo
+      const downloadUrl = `/api/videos/${productId}/download`
+
+      // Criar um link temporário para download
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = `shopee_product_${productId}.mp4`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+
+      toast({
+        title: "Download iniciado",
+        description: "O vídeo está sendo baixado em formato MP4",
+        className: "bg-green-100 border-green-500 text-green-800",
+      })
+    } catch (error: any) {
+      console.error("Erro ao baixar vídeo:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao baixar vídeo",
+        description: error.message || "Ocorreu um erro ao baixar o vídeo",
+        className: "bg-red-100 border-red-500 text-red-800",
+      })
+    } finally {
+      // Pequeno atraso para melhorar a experiência do usuário
+      setTimeout(() => {
+        setIsDownloading(false)
+        setDownloadingId(null)
+      }, 1000)
+    }
+  }
+
+  // Função para visualizar o vídeo em uma nova janela
   const openPreviewInNewWindow = (videoUrl: string) => {
     if (!videoUrl) return
 
@@ -276,22 +387,52 @@ export default function PublicacaoPage() {
                 <ExternalLink className="h-3 w-3 mr-1" />
                 Visualizar
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7"
+                onClick={() => handleDownloadVideo(video.productId)}
+                disabled={isDownloading && downloadingId === video.productId}
+              >
+                {isDownloading && downloadingId === video.productId ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <Download className="h-3 w-3 mr-1" />
+                )}
+                Baixar MP4
+              </Button>
               <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => copyVideoLink(video.videoUrl)}>
                 <Copy className="h-3 w-3 mr-1" />
                 Copiar Link
               </Button>
               {isPending && (
-                <Button
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={() => handlePublishVideo(video.productId)}
-                  disabled={isPublishing && publishingId === video.productId}
-                >
-                  {isPublishing && publishingId === video.productId ? (
-                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                  ) : null}
-                  Publicar
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => handlePublishVideo(video.productId)}
+                    disabled={isPublishing && publishingId === video.productId}
+                  >
+                    {isPublishing && publishingId === video.productId ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : null}
+                    Publicar
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="text-xs h-7"
+                    onClick={() => confirmDeleteVideo(video)}
+                    disabled={isDeleting && deletingId === video.productId}
+                  >
+                    {isDeleting && deletingId === video.productId ? (
+                      <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                    ) : (
+                      <Trash2 className="h-3 w-3 mr-1" />
+                    )}
+                    Excluir
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -347,6 +488,41 @@ export default function PublicacaoPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Diálogo de confirmação de exclusão */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-destructive" />
+              Confirmar exclusão
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este vídeo? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {videoToDelete && (
+            <div className="mt-2 p-2 bg-muted rounded-md">
+              <div className="font-medium">{videoToDelete.productName}</div>
+              <div className="text-xs text-muted-foreground">ID: {videoToDelete.productId}</div>
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteVideo()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

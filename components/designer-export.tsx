@@ -45,13 +45,57 @@ export function DesignerExport() {
   const [isRecording, setIsRecording] = useState(false)
   const [recordingDuration, setRecordingDuration] = useState(5)
 
+  // Estado para mensagens de toast
+  const [toastMessage, setToastMessage] = useState<{
+    title: string
+    description: string
+    variant?: "default" | "destructive"
+    visible: boolean
+  } | null>(null)
+
   // Referências para manipulação do DOM
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
 
-  // Hook de toast para notificações
+  // Verificar se o ToastProvider está disponível
   const { toast } = useToast()
+  const toastAvailable = true
+  // try {
+  //   // eslint-disable-next-line react-hooks/rules-of-hooks
+  //   const { toast } = useToast()
+  //   toastAvailable = true
+  // } catch (e) {
+  //   toastAvailable = false
+  // }
+
+  // Função para mostrar toast
+  const showToast = (title: string, description: string, variant?: "default" | "destructive") => {
+    if (toastAvailable) {
+      try {
+        toast({
+          title,
+          description,
+          variant,
+        })
+      } catch (e) {
+        console.error("Erro ao mostrar toast:", e)
+      }
+    } else {
+      // Fallback para quando o ToastProvider não está disponível
+      setToastMessage({
+        title,
+        description,
+        variant,
+        visible: true,
+      })
+
+      // Esconder o toast após 3 segundos
+      setTimeout(() => {
+        setToastMessage(null)
+      }, 3000)
+    }
+  }
 
   // Buscar produtos ao carregar o componente
   useEffect(() => {
@@ -189,12 +233,7 @@ export function DesignerExport() {
    */
   const handleGenerate = async () => {
     if (!selectedProduct) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao gerar card",
-        description: "Selecione um produto primeiro",
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Erro ao gerar card", "Selecione um produto primeiro", "destructive")
       return
     }
 
@@ -247,20 +286,11 @@ export function DesignerExport() {
       // Mudar para a aba de preview automaticamente
       setActiveTab("preview")
 
-      toast({
-        title: "Card gerado com sucesso",
-        description: "Você pode visualizar o card na aba de preview",
-        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Card gerado com sucesso", "Você pode visualizar o card na aba de preview")
     } catch (error: any) {
       console.error("Erro ao gerar vídeo:", error)
       setGenerationProgress(0)
-      toast({
-        variant: "destructive",
-        title: "Erro ao gerar o card",
-        description: error.message,
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Erro ao gerar o card", error.message, "destructive")
     } finally {
       stopProgress()
       setTimeout(() => {
@@ -275,12 +305,7 @@ export function DesignerExport() {
    */
   const handleRecordVideo = async () => {
     if (!previewUrl || !htmlTemplate) {
-      toast({
-        variant: "destructive",
-        title: "Erro ao gravar vídeo",
-        description: "Gere um card primeiro",
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Erro ao gravar vídeo", "Gere um card primeiro", "destructive")
       return
     }
 
@@ -288,12 +313,7 @@ export function DesignerExport() {
 
     try {
       // Simular gravação de vídeo
-      toast({
-        title: "Gravando vídeo",
-        description: `Gravando vídeo de ${recordingDuration} segundos...`,
-        className:
-          "bg-yellow-100 border-yellow-500 text-yellow-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Gravando vídeo", `Gravando vídeo de ${recordingDuration} segundos...`)
 
       // Simular tempo de gravação
       await new Promise((resolve) => setTimeout(resolve, recordingDuration * 1000))
@@ -333,19 +353,10 @@ export function DesignerExport() {
         setActiveTab("video")
       }
 
-      toast({
-        title: "Vídeo gravado com sucesso",
-        description: "O vídeo foi salvo e está pronto para ser publicado",
-        className: "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Vídeo gravado com sucesso", "O vídeo foi salvo e está pronto para ser publicado")
     } catch (error: any) {
       console.error("Erro ao gravar vídeo:", error)
-      toast({
-        variant: "destructive",
-        title: "Erro ao gravar vídeo",
-        description: error.message,
-        className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-      })
+      showToast("Erro ao gravar vídeo", error.message, "destructive")
     } finally {
       setIsRecording(false)
     }
@@ -400,26 +411,30 @@ export function DesignerExport() {
     navigator.clipboard
       .writeText(window.location.origin + previewUrl)
       .then(() => {
-        toast({
-          title: "Link copiado",
-          description: "O link do preview foi copiado para a área de transferência",
-          className:
-            "bg-green-100 border-green-500 text-green-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-        })
+        showToast("Link copiado", "O link do preview foi copiado para a área de transferência")
       })
       .catch((err) => {
         console.error("Erro ao copiar link:", err)
-        toast({
-          variant: "destructive",
-          title: "Erro ao copiar link",
-          description: "Não foi possível copiar o link para a área de transferência",
-          className: "bg-red-100 border-red-500 text-red-800 fixed top-4 left-1/2 transform -translate-x-1/2 z-50",
-        })
+        showToast("Erro ao copiar link", "Não foi possível copiar o link para a área de transferência", "destructive")
       })
   }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_375px] gap-4 mt-2">
+      {/* Toast fallback quando o ToastProvider não está disponível */}
+      {toastMessage && toastMessage.visible && (
+        <div
+          className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-md shadow-md ${
+            toastMessage.variant === "destructive"
+              ? "bg-red-100 border border-red-500 text-red-800"
+              : "bg-green-100 border border-green-500 text-green-800"
+          }`}
+        >
+          <div className="font-medium">{toastMessage.title}</div>
+          <div className="text-sm">{toastMessage.description}</div>
+        </div>
+      )}
+
       {/* Formulário de geração */}
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
