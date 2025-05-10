@@ -23,7 +23,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
   const styleConfig = getStyleConfig(style)
 
   // Adicionar prefixo a todas as classes CSS para evitar conflitos
-  return `<!DOCTYPE html>
+  const renderedTemplate = `<!DOCTYPE html>
 <html lang="pt-BR">
 
 <head>
@@ -255,6 +255,13 @@ export function renderProductCardTemplate(product: any, description: string, sty
   </div>
 </body>
 </html>`
+
+  if (!renderedTemplate || renderedTemplate.trim() === "") {
+    console.error("Template renderizado está vazio")
+    throw new Error("O template renderizado está vazio. Verifique os dados fornecidos.")
+  }
+
+  return renderedTemplate
 }
 
 // Função para obter configurações de estilo baseadas no formato escolhido

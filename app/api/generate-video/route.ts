@@ -13,6 +13,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, message: error.message, error }, { status: 400 })
     }
 
+    console.log("Iniciando geração de vídeo com parâmetros:", {
+      productId,
+      useAI,
+      customDescription: customDescription ? `${customDescription.substring(0, 20)}...` : undefined,
+      videoStyle,
+    })
+
     console.log(`Generating video for product ID: ${productId}, useAI: ${useAI}, style: ${videoStyle}`)
 
     // Check if this product ID has already been processed
@@ -165,6 +172,20 @@ export async function POST(req: Request) {
     // Generate HTML template
     const htmlTemplate = renderProductCardTemplate(product, description, videoStyle)
 
+    // Verificar se o htmlTemplate foi gerado corretamente
+    if (!htmlTemplate || htmlTemplate.trim() === "") {
+      console.error("HTML Template vazio ou inválido")
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Falha ao gerar o HTML do card. Template vazio ou inválido.",
+        },
+        { status: 500 },
+      )
+    }
+
+    console.log("HTML Template gerado com sucesso. Tamanho:", htmlTemplate.length)
+
     // Mark the product ID as processed (but don't fail if this doesn't work)
     try {
       await addProcessedId(productId)
@@ -189,22 +210,24 @@ export async function POST(req: Request) {
       timestamp: new Date().toISOString(),
     })
   } catch (error: any) {
-    const appError = error.type
-      ? error
-      : createAppError(ErrorType.UNEXPECTED, `Falha ao gerar vídeo: ${error.message}`, {
-          originalError: error,
-        })
+    console.error("Erro detalhado na geração de vídeo:", error)
+    console.error("Stack trace:", error.stack)
 
-    handleError(appError, {
-      context: "generate-video",
-      operation: "main",
-    })
+    // Tentar extrair mais informações do erro
+    const errorDetails = {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      code: error.code,
+    }
+
+    console.error("Detalhes do erro:", JSON.stringify(errorDetails, null, 2))
 
     return NextResponse.json(
       {
         success: false,
-        message: appError.message,
-        error: appError,
+        message: `Falha ao gerar vídeo: ${error.message}`,
+        errorDetails: errorDetails,
       },
       { status: 500 },
     )

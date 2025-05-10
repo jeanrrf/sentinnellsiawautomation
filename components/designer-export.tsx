@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Video, AlertCircle, ExternalLink, Copy } from "lucide-react"
+import { Loader2, Video, AlertCircle, ExternalLink, Copy, RefreshCw } from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -43,8 +43,9 @@ export function DesignerExport() {
   // Estados para controle da interface
   const [activeTab, setActiveTab] = useState("preview")
   const [previewError, setPreviewError] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
+  const [isRecording, setIsRecording] = useState(isRecording)
   const [recordingDuration, setRecordingDuration] = useState(5)
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false)
 
   // Estado para mensagens de toast
   const [toastMessage, setToastMessage] = useState<{
@@ -138,8 +139,11 @@ export function DesignerExport() {
 
   // Renderizar o preview de forma isolada
   useEffect(() => {
+    console.log("Tentando renderizar preview. HTML Template existe?", !!htmlTemplate)
+
     if (htmlTemplate && previewContainerRef.current) {
       try {
+        console.log("Renderizando preview com template HTML")
         // Limpar o conteúdo anterior
         previewContainerRef.current.innerHTML = ""
 
@@ -167,10 +171,36 @@ export function DesignerExport() {
         // Iniciar o carregamento
         iframe.src = "about:blank"
 
+        setTimeout(() => {
+          const iframe = previewContainerRef.current?.querySelector("iframe")
+          if (iframe && iframe.contentDocument) {
+            const content = iframe.contentDocument.body.innerHTML
+            console.log("Conteúdo do iframe:", content ? "Preenchido" : "Vazio")
+
+            if (!content || content.trim() === "") {
+              console.error("Iframe está vazio após renderização")
+              setPreviewError(true)
+              showToast(
+                "Erro de renderização",
+                "O preview não foi renderizado corretamente. Tente gerar novamente.",
+                "destructive",
+              )
+            }
+          }
+        }, 500)
+
         setPreviewError(false)
       } catch (error) {
         console.error("Erro ao renderizar preview:", error)
+        console.error("Detalhes do erro:", JSON.stringify(error, null, 2))
         setPreviewError(true)
+
+        // Mostrar toast com erro
+        showToast(
+          "Erro ao renderizar preview",
+          "Ocorreu um erro ao renderizar o preview. Verifique o console para mais detalhes.",
+          "destructive",
+        )
       }
     }
   }, [htmlTemplate])
@@ -242,6 +272,7 @@ export function DesignerExport() {
     setGenerationStep("Iniciando geração do card...")
     const stopProgress = simulateProgress()
     setVideoGenerated(false)
+    setIsPreviewLoading(true)
 
     try {
       console.log("Gerando card para o produto:", selectedProduct)
@@ -278,6 +309,11 @@ export function DesignerExport() {
         throw new Error(data.message || "Falha ao gerar vídeo")
       }
 
+      // Dentro da função handleGenerate, após receber a resposta da API
+      console.log("Resposta da API:", data)
+      console.log("HTML Template recebido:", data.htmlTemplate ? `${data.htmlTemplate.substring(0, 100)}...` : "Nenhum")
+      console.log("Preview URL:", previewUrl)
+
       setHtmlTemplate(data.htmlTemplate)
       const timestamp = Date.now()
       setPreviewUrl(`/api/preview/${selectedProduct}?style=${videoStyle}&t=${timestamp}`)
@@ -290,14 +326,24 @@ export function DesignerExport() {
       showToast("Card gerado com sucesso", "Você pode visualizar o card na aba de preview")
     } catch (error: any) {
       console.error("Erro ao gerar vídeo:", error)
+      console.error("Stack trace:", error.stack)
       setGenerationProgress(0)
-      showToast("Erro ao gerar o card", error.message, "destructive")
+      setHtmlTemplate("") // Limpar o template em caso de erro
+      setPreviewUrl("") // Limpar a URL de preview
+
+      // Mostrar mensagem de erro mais detalhada
+      showToast(
+        "Erro ao gerar o card",
+        `${error.message || "Erro desconhecido"}. Verifique o console para mais detalhes.`,
+        "destructive",
+      )
     } finally {
       stopProgress()
       setTimeout(() => {
         setIsGenerating(false)
         setGenerationStep(null)
-      }, 500)
+        setIsPreviewLoading(false)
+      }, 1000)
     }
   }
 
@@ -418,6 +464,23 @@ export function DesignerExport() {
         console.error("Erro ao copiar link:", err)
         showToast("Erro ao copiar link", "Não foi possível copiar o link para a área de transferência", "destructive")
       })
+  }
+
+  // Adicionar uma nova função
+  const reloadPreview = () => {
+    if (!previewUrl) return
+
+    setIsPreviewLoading(true)
+
+    // Forçar uma nova renderização do preview
+    const timestamp = Date.now()
+    const newPreviewUrl = previewUrl.split("&t=")[0] + `&t=${timestamp}`
+    setPreviewUrl(newPreviewUrl)
+
+    // Simular um pequeno atraso para a recarga
+    setTimeout(() => {
+      setIsPreviewLoading(false)
+    }, 1000)
   }
 
   return (
@@ -610,15 +673,39 @@ export function DesignerExport() {
                       {/* TikTok Video Container - Proporção exata 9:16 */}
                       <div className="relative w-full" style={{ height: "calc(100% - 80px)" }}>
                         <div className="w-full h-full overflow-hidden relative">
-                          {previewError ? (
+                          {previewUrl && !isPreviewLoading && !previewError && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="absolute top-2 right-2 z-10"
+                              onClick={reloadPreview}
+                              aria-label="Recarregar preview"
+                            >
+                              <RefreshCw className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {isPreviewLoading ? (
                             <div className="flex items-center justify-center h-full bg-muted">
+                              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                              <p className="ml-2 text-sm">Carregando preview...</p>
+                            </div>
+                          ) : previewError ? (
+                            <div className="flex flex-col items-center justify-center h-full bg-muted">
+                              <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
                               <p className="text-muted-foreground text-center text-sm">
                                 Não foi possível renderizar o preview. <br />
                                 Tente gerar o card novamente.
                               </p>
+                              <Button variant="outline" size="sm" className="mt-4" onClick={handleGenerate}>
+                                Tentar novamente
+                              </Button>
                             </div>
                           ) : (
-                            <div ref={previewContainerRef} className="w-full h-full overflow-hidden" />
+                            <div
+                              ref={previewContainerRef}
+                              className="w-full h-full overflow-hidden bg-white" // Adicionado bg-white para garantir visibilidade
+                              style={{ minHeight: "400px" }} // Garantir altura mínima
+                            />
                           )}
                         </div>
                       </div>

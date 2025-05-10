@@ -7,6 +7,13 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const url = new URL(request.url)
     const style = url.searchParams.get("style") || "portrait"
     const timestamp = url.searchParams.get("t") || Date.now().toString()
+    const searchParams = url.searchParams
+
+    console.log("Requisição de preview recebida:", {
+      productId,
+      style,
+      timestamp: searchParams.get("t"),
+    })
 
     console.log(`Gerando preview para product ID: ${productId} com style: ${style} at ${timestamp}`)
 
@@ -80,8 +87,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
     // Generate HTML template
     const htmlTemplate = renderProductCardTemplate(product, description, style)
 
+    const html = htmlTemplate
+
+    // Verificar se o HTML foi gerado corretamente
+    if (!html || html.trim() === "") {
+      console.error("HTML do preview vazio ou inválido")
+      return new NextResponse("Erro: Não foi possível gerar o preview. HTML vazio ou inválido.", { status: 500 })
+    }
+
+    console.log("Preview HTML gerado com sucesso. Tamanho:", html.length)
+
     // Return the HTML directly with cache control headers
-    return new NextResponse(htmlTemplate, {
+    return new NextResponse(html, {
       headers: {
         "Content-Type": "text/html",
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -89,14 +106,11 @@ export async function GET(request: Request, { params }: { params: { id: string }
         Expires: "0",
       },
     })
-  } catch (error) {
-    console.error("Error generating preview:", error)
-    return new NextResponse(`Error generating preview: ${error.message}`, {
-      status: 500,
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    })
+  } catch (error: any) {
+    console.error("Erro detalhado na geração do preview:", error)
+    console.error("Stack trace:", error.stack)
+
+    return new NextResponse(`Erro ao gerar preview: ${error.message}`, { status: 500 })
   }
 }
 
