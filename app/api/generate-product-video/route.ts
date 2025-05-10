@@ -1,98 +1,132 @@
-import { createLogger, ErrorCodes } from "@/lib/logger"
-import { createApiHandler } from "@/lib/api-logger"
-
-// Create a module-specific logger
-const logger = createLogger("API:GenerateProductVideo")
-
-// Validation function for request data
-function validateRequest(data: any) {
-  const errors = []
-
-  if (!data.productId) {
-    errors.push({ field: "productId", message: "Product ID is required" })
-  }
-
-  if (data.duration !== undefined) {
-    if (typeof data.duration !== "number" || data.duration < 5 || data.duration > 60) {
-      errors.push({ field: "duration", message: "Duration must be a number between 5 and 60 seconds" })
-    }
-  }
-
-  if (data.style !== undefined && !["portrait", "square", "landscape"].includes(data.style)) {
-    errors.push({ field: "style", message: "Style must be one of: portrait, square, landscape" })
-  }
-
-  if (data.quality !== undefined && !["low", "medium", "high"].includes(data.quality)) {
-    errors.push({ field: "quality", message: "Quality must be one of: low, medium, high" })
-  }
-
-  return {
-    valid: errors.length === 0,
-    errors: errors.length > 0 ? errors : undefined,
-  }
-}
+import { NextResponse } from "next/server"
+import fs from "fs"
+import { renderHtmlToImage } from "@/lib/puppeteer-renderer"
+import { convertImageToVideo, optimizeVideoForSocialMedia } from "@/lib/ffmpeg-converter"
+import { getCachedProduct, createCacheEntry, getCacheEntry } from "@/lib/redis"
+import path from "path"
 
 // Definir o timeout máximo para 60 segundos (máximo da Vercel)
 export const maxDuration = 60
 
-// Handler function for the API route
-async function handleGenerateProductVideo(req: Request, data: any) {
-  // Log the start of video generation
-  logger.info("Starting product video generation", {
-    context: {
-      productId: data.productId,
-      duration: data.duration,
-      style: data.style,
-      quality: data.quality,
-      withAudio: data.withAudio,
-      optimize: data.optimize,
-      fps: data.fps,
-    },
-  })
-
+export async function POST(req: Request) {
   try {
-    // Simulate video generation process
-    logger.debug("Fetching product details")
-    // ... fetch product details
+    // Extrair parâmetros do corpo da requisição
+    const {
+      productId,
+      duration = 10,
+      style = "portrait",
+      quality = "medium",
+      withAudio = false,
+      optimize = true,
+      fps = 30,
+    } = await req.json()
 
-    logger.debug("Rendering product card")
-    // ... render product card
+    if (!productId) {
+      return NextResponse.json({ success: false, message: "ID do produto é obrigatório" }, { status: 400 })
+    }
 
-    logger.debug("Converting to video")
-    // ... convert to video
+    console.log(`Gerando vídeo para o produto ${productId}:`)
+    console.log(`- Duração: ${duration}s`)
+    console.log(`- Estilo: ${style}`)
+    console.log(`- Qualidade: ${quality}`)
+    console.log(`- Com áudio: ${withAudio}`)
+    console.log(`- Otimizar: ${optimize}`)
+    console.log(`- FPS: ${fps}`)
 
-    // For demonstration, we'll create a simple blob
-    const videoBlob = new Blob(["test video content"], { type: "video/mp4" })
+    // Criar chave de cache única baseada em todos os parâmetros
+    const cacheKey = `video:${productId}:${style}:${duration}:${quality}:${withAudio}:${optimize}:${fps}`
 
-    logger.info("Video generation completed successfully", {
-      context: {
-        productId: data.productId,
-        blobSize: videoBlob.size,
-      },
+    // Verificar se já temos um vídeo gerado para estes parâmetros
+    const cachedVideo = await getCacheEntry(cacheKey)
+
+    if (cachedVideo && cachedVideo.videoPath && fs.existsSync(cachedVideo.videoPath)) {
+      console.log(`Vídeo encontrado em cache: ${cachedVideo.videoPath}`)
+
+      // Ler o arquivo de vídeo
+      const videoBuffer = fs.readFileSync(cachedVideo.videoPath)
+
+      // Retornar o vídeo como resposta
+      return new NextResponse(videoBuffer, {
+        headers: {
+          "Content-Type": "video/mp4",
+          "Content-Disposition": `attachment; filename="product-${productId}.mp4"`,
+        },
+      })
+    }
+
+    // Buscar dados do produto no Redis
+    const productData = await getCachedProduct(productId)
+
+    if (!productData) {
+      return NextResponse.json({ success: false, message: "Produto não encontrado no cache" }, { status: 404 })
+    }
+
+    // Verificar se já temos o HTML do template
+    const htmlTemplate = productData.htmlTemplate
+
+    if (!htmlTemplate) {
+      return NextResponse.json(
+        { success: false, message: "Template HTML não encontrado para este produto" },
+        { status: 404 },
+      )
+    }
+
+    console.log("Template HTML encontrado, iniciando renderização...")
+
+    // Configurar dimensões com base no estilo
+    let width = 1080
+    let height = 1920
+
+    if (style === "square") {
+      width = 1080
+      height = 1080
+    } else if (style === "landscape") {
+      width = 1920
+      height = 1080
+    }
+
+    // Renderizar o HTML como imagem usando Puppeteer
+    const { imagePath, htmlPath } = await renderHtmlToImage(htmlTemplate, { width, height })
+
+    console.log("Imagem renderizada, iniciando conversão para vídeo...")
+
+    // Converter a imagem em vídeo usando FFmpeg
+    let videoPath = await convertImageToVideo(imagePath, {
+      duration: Number(duration),
+      fadeIn: 0.5,
+      fadeOut: 0.5,
+      audioPath: withAudio ? path.join(process.cwd(), "public", "audio", "background.mp3") : null,
+      resolution: style as any,
+      quality: quality as any,
+      fps,
     })
 
-    // Return a successful response
-    return new Response(videoBlob, {
-      status: 200,
+    // Se solicitado, otimizar o vídeo para redes sociais
+    if (optimize) {
+      console.log("Otimizando vídeo para redes sociais...")
+      videoPath = await optimizeVideoForSocialMedia(videoPath)
+    }
+
+    console.log("Vídeo gerado com sucesso, preparando resposta...")
+
+    // Salvar o caminho do vídeo no cache
+    await createCacheEntry(cacheKey, { videoPath }, 60 * 60 * 24) // 24 horas de TTL
+
+    // Ler o arquivo de vídeo
+    const videoBuffer = fs.readFileSync(videoPath)
+
+    // Não vamos limpar os arquivos temporários agora para permitir o cache
+    // Mas podemos implementar uma função de limpeza periódica em outro endpoint
+
+    // Retornar o vídeo como resposta
+    return new NextResponse(videoBuffer, {
       headers: {
         "Content-Type": "video/mp4",
-        "Content-Disposition": `attachment; filename="product-${data.productId}.mp4"`,
+        "Content-Disposition": `attachment; filename="product-${productId}.mp4"`,
       },
     })
   } catch (error) {
-    // Log the error
-    logger.error("Failed to generate product video", {
-      code: ErrorCodes.VIDEO.GENERATION_FAILED,
-      details: error,
-      context: {
-        productId: data.productId,
-        error: error.message,
-      },
-    })
-
-    // Re-throw the error to be handled by the wrapper
-    throw error
+    console.error("Erro ao gerar vídeo:", error)
+    return NextResponse.json({ success: false, message: `Erro ao gerar vídeo: ${error.message}` }, { status: 500 })
   }
 }
-
-export const POST = createApiHandler(handleGenerateProductVideo, "GenerateProductVideo", validateRequest)

@@ -1,94 +1,71 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { createLogger, ErrorCodes } from "@/lib/logger"
 
-// Create a module-specific logger
-const logger = createLogger("usePersistentState")
+type StorageType = "localStorage" | "sessionStorage"
 
-/**
- * Custom hook for state that persists in localStorage
- * @param key The localStorage key to store the state under
- * @param initialValue The initial value to use if no value is found in localStorage
- * @returns A stateful value and a function to update it
- */
-export function usePersistentState<T>(key: string, initialValue: T): [T, (value: T) => void] {
-  // Create a module-instance specific logger with the key in context
-  const hookLogger = createLogger(`usePersistentState:${key}`)
-
-  hookLogger.debug("Hook initializing", {
-    context: { initialValue },
-  })
-
-  const [state, setState] = useState<T>(initialValue)
-  const initializedRef = useRef(false)
-
-  // Load the initial state from localStorage
-  useEffect(() => {
-    if (typeof window === "undefined" || initializedRef.current) return
+export function usePersistentState<T>(
+  key: string,
+  initialValue: T,
+  storageType: StorageType = "localStorage",
+): [T, (value: T | ((val: T) => T)) => void] {
+  // Função para obter o valor inicial do storage ou usar o valor padrão
+  const getInitialValue = (): T => {
+    if (typeof window === "undefined") {
+      return initialValue
+    }
 
     try {
-      hookLogger.debug("Loading state from localStorage")
-      const item = localStorage.getItem(key)
+      const storage = window[storageType]
+      const storedValue = storage.getItem(key)
 
-      if (item !== null) {
-        try {
-          const parsedValue = JSON.parse(item)
-          setState(parsedValue)
-          hookLogger.debug("State loaded successfully from localStorage")
-        } catch (parseError) {
-          hookLogger.error("Failed to parse localStorage value", {
-            code: ErrorCodes.STORAGE.INVALID_DATA,
-            details: parseError,
-            context: { key, rawValue: item },
-          })
-          // Use initial value if parsing fails
-          setState(initialValue)
-        }
-      } else {
-        hookLogger.debug("No value found in localStorage, using initial value")
-        setState(initialValue)
+      if (storedValue === null) {
+        return initialValue
+      }
+
+      try {
+        return JSON.parse(storedValue)
+      } catch (parseError) {
+        console.error(`Error parsing stored value for key "${key}":`, parseError)
+        return initialValue
       }
     } catch (error) {
-      hookLogger.error("Error accessing localStorage", {
-        code: ErrorCodes.STORAGE.READ_FAILED,
-        details: error,
-        context: { key },
-      })
-      // Use initial value if localStorage access fails
-      setState(initialValue)
-    } finally {
-      initializedRef.current = true
+      console.error(`Error reading from ${storageType} for key "${key}":`, error)
+      return initialValue
     }
-  }, [initialValue, key, hookLogger])
-
-  // Update localStorage when the state changes
-  useEffect(() => {
-    if (typeof window === "undefined" || !initializedRef.current) return
-
-    try {
-      hookLogger.debug("Saving state to localStorage", {
-        context: { value: state },
-      })
-      localStorage.setItem(key, JSON.stringify(state))
-    } catch (error) {
-      hookLogger.error("Failed to save state to localStorage", {
-        code: ErrorCodes.STORAGE.WRITE_FAILED,
-        details: error,
-        context: { key, value: state },
-      })
-    }
-  }, [state, key, hookLogger])
-
-  // Wrapper for setState that also updates localStorage
-  const setPersistedState = (value: T) => {
-    hookLogger.debug("State update requested", {
-      context: { previousValue: state, newValue: value },
-    })
-    setState(value)
   }
 
-  return [state, setPersistedState]
-}
+  // Inicializar o estado com o valor inicial (será atualizado no useEffect)
+  const [value, setValue] = useState<T>(initialValue)
 
-export default usePersistentState
+  // Usar uma ref para rastrear se o valor inicial já foi carregado
+  const initializedRef = useRef(false)
+
+  // Carregar o valor do storage quando o componente montar
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    if (!initializedRef.current) {
+      const initialStoredValue = getInitialValue()
+      setValue(initialStoredValue)
+      initializedRef.current = true
+    }
+  }, []) // Executar apenas uma vez na montagem
+
+  // Atualizar o storage quando o valor mudar
+  useEffect(() => {
+    if (typeof window === "undefined") return
+
+    // Não salvar no storage até que o valor inicial tenha sido carregado
+    if (!initializedRef.current) return
+
+    try {
+      const storage = window[storageType]
+      storage.setItem(key, JSON.stringify(value))
+    } catch (error) {
+      console.error(`Error writing to ${storageType} for key "${key}":`, error)
+    }
+  }, [key, value, storageType])
+
+  return [value, setValue]
+}

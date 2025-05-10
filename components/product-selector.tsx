@@ -6,10 +6,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button"
 import { Check, ChevronsUpDown, Loader2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createLogger, ErrorCodes } from "@/lib/logger"
-
-// Create a module-specific logger
-const logger = createLogger("ProductSelector")
 
 interface ProductSelectorProps {
   products: any[]
@@ -18,11 +14,6 @@ interface ProductSelectorProps {
 }
 
 export function ProductSelector({ products, value, onChange }: ProductSelectorProps) {
-  // Log component initialization
-  logger.debug("Component initializing", {
-    context: { productsCount: products?.length || 0 },
-  })
-
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [filteredProducts, setFilteredProducts] = useState<any[]>([])
@@ -33,10 +24,6 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
   // Inicializar produtos locais quando os produtos externos mudarem
   useEffect(() => {
     if (products && products.length > 0 && !productsSetRef.current) {
-      logger.debug("Initializing local products from props", {
-        context: { count: products.length },
-      })
-
       setLocalProducts(products)
       setFilteredProducts(products)
       productsSetRef.current = true
@@ -50,77 +37,32 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
       return
     }
 
-    logger.debug("Filtering products by search term", {
-      context: {
-        searchTerm,
-        totalProducts: localProducts.length,
-      },
-    })
-
     const lowerSearchTerm = searchTerm.toLowerCase()
     const filtered = localProducts.filter(
       (product) =>
         product.productName.toLowerCase().includes(lowerSearchTerm) ||
         product.itemId.toString().includes(lowerSearchTerm),
     )
-
     setFilteredProducts(filtered)
-
-    logger.debug("Products filtered", {
-      context: {
-        filteredCount: filtered.length,
-        totalCount: localProducts.length,
-      },
-    })
   }, [searchTerm, localProducts])
 
   // Buscar produtos se não houver nenhum
   useEffect(() => {
     if (localProducts.length === 0 && !isLoading) {
-      logger.info("No local products available, fetching from API")
-
       const fetchProducts = async () => {
         setIsLoading(true)
         try {
-          logger.debug("Sending API request to fetch products")
-
           const response = await fetch("/api/products")
-
-          if (!response.ok) {
-            logger.error("Products API request failed", {
-              code: ErrorCodes.API.REQUEST_FAILED,
-              context: {
-                status: response.status,
-                statusText: response.statusText,
-              },
-            })
-            throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
-          }
-
-          const data = await response.json()
-
-          if (data.products && Array.isArray(data.products)) {
-            logger.info("Products fetched successfully from API", {
-              context: { count: data.products.length },
-            })
-
-            setLocalProducts(data.products)
-            setFilteredProducts(data.products)
-            productsSetRef.current = true
-          } else {
-            logger.warning("API returned invalid products data", {
-              code: ErrorCodes.API.RESPONSE_INVALID,
-              context: {
-                responseType: typeof data.products,
-                isArray: Array.isArray(data.products),
-              },
-            })
+          if (response.ok) {
+            const data = await response.json()
+            if (data.products && Array.isArray(data.products)) {
+              setLocalProducts(data.products)
+              setFilteredProducts(data.products)
+              productsSetRef.current = true
+            }
           }
         } catch (error) {
-          logger.error("Error fetching products", {
-            code: ErrorCodes.API.REQUEST_FAILED,
-            details: error,
-          })
+          console.error("Error fetching products:", error)
         } finally {
           setIsLoading(false)
         }
@@ -133,25 +75,8 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
   // Encontrar o produto selecionado
   const selectedProduct = localProducts.find((product) => product.itemId === value)
 
-  // Log component render
-  logger.debug("Component rendering", {
-    context: {
-      selectedProduct: selectedProduct?.itemId || "none",
-      isOpen: open,
-      filteredProductsCount: filteredProducts.length,
-    },
-  })
-
   return (
-    <Popover
-      open={open}
-      onOpenChange={(newOpen) => {
-        logger.debug("Popover state changed", {
-          context: { previousState: open, newState: newOpen },
-        })
-        setOpen(newOpen)
-      }}
-    >
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -180,33 +105,18 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
           <CommandInput
             placeholder="Buscar produto..."
             value={searchTerm}
-            onValueChange={(newValue) => {
-              logger.debug("Search term changed", {
-                context: { previousTerm: searchTerm, newTerm: newValue },
-              })
-              setSearchTerm(newValue)
-            }}
+            onValueChange={setSearchTerm}
             aria-label="Buscar produto"
           />
           <CommandList>
-            <CommandEmpty>
-              {logger.debug("No products found for search term", {
-                context: { searchTerm },
-              }) && null}
-              Nenhum produto encontrado.
-            </CommandEmpty>
+            <CommandEmpty>Nenhum produto encontrado.</CommandEmpty>
             <CommandGroup heading="Produtos">
               {filteredProducts.map((product) => (
                 <CommandItem
                   key={product.itemId}
                   value={product.itemId}
                   onSelect={(currentValue) => {
-                    logger.info("Product selected", {
-                      context: {
-                        productId: currentValue,
-                        productName: product.productName,
-                      },
-                    })
+                    console.log("Produto selecionado:", currentValue)
                     onChange(currentValue === value ? "" : currentValue)
                     setOpen(false)
                   }}
