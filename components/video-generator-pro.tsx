@@ -52,6 +52,7 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
   const [isExporting, setIsExporting] = useState(false)
   const [previewHtml, setPreviewHtml] = useState("")
   const [isUploading, setIsUploading] = useState(false)
+  const [productsLoaded, setProductsLoaded] = useState(false)
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const { toast } = useToast()
@@ -61,38 +62,73 @@ export function VideoGeneratorPro({ products }: VideoGeneratorProProps) {
 
   // Carregar histórico de geração do localStorage
   useEffect(() => {
-    const savedHistory = localStorage.getItem("videoGenerationHistory")
-    if (savedHistory) {
-      try {
-        setGenerationHistory(JSON.parse(savedHistory))
-      } catch (e) {
-        console.error("Erro ao carregar histórico:", e)
+    if (typeof window === "undefined") return
+
+    try {
+      const savedHistory = localStorage.getItem("videoGenerationHistory")
+      if (savedHistory) {
+        const parsedHistory = JSON.parse(savedHistory)
+        if (Array.isArray(parsedHistory)) {
+          setGenerationHistory(parsedHistory)
+        }
       }
+    } catch (e) {
+      console.error("Erro ao carregar histórico:", e)
     }
   }, [])
 
   // Salvar histórico no localStorage quando atualizado
   useEffect(() => {
+    if (typeof window === "undefined") return
+
     if (generationHistory.length > 0) {
-      localStorage.setItem("videoGenerationHistory", JSON.stringify(generationHistory))
+      try {
+        localStorage.setItem("videoGenerationHistory", JSON.stringify(generationHistory))
+      } catch (e) {
+        console.error("Erro ao salvar histórico:", e)
+      }
     }
   }, [generationHistory])
 
   // Verificar se o produto selecionado existe nos produtos disponíveis
   useEffect(() => {
-    if (selectedProduct && products.length > 0) {
+    // Aguardar até que os produtos sejam carregados
+    if (products.length === 0) {
+      return
+    }
+
+    // Marcar que os produtos foram carregados
+    if (!productsLoaded) {
+      setProductsLoaded(true)
+    }
+
+    // Verificar se o produto selecionado existe
+    if (selectedProduct && productsLoaded) {
+      console.log("Verificando produto:", selectedProduct)
+      console.log(
+        "Produtos disponíveis:",
+        products.map((p) => p.itemId),
+      )
+
       const productExists = products.some((p) => p.itemId === selectedProduct)
+
       if (!productExists) {
+        console.log("Produto não encontrado na lista:", selectedProduct)
+
+        // Limpar a seleção apenas se o produto não existir
+        setSelectedProduct("")
+
         toast({
           variant: "warning",
           title: "Produto não encontrado",
           description:
             "O produto selecionado anteriormente não está mais disponível. Por favor, selecione outro produto.",
         })
-        setSelectedProduct("")
+      } else {
+        console.log("Produto encontrado na lista:", selectedProduct)
       }
     }
-  }, [products, selectedProduct, setSelectedProduct, toast])
+  }, [products, selectedProduct, setSelectedProduct, toast, productsLoaded])
 
   const handleGenerateVideo = async () => {
     if (!selectedProduct) {

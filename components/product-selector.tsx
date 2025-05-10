@@ -16,35 +16,47 @@ interface ProductSelectorProps {
 export function ProductSelector({ products, value, onChange }: ProductSelectorProps) {
   const [open, setOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
-  const [filteredProducts, setFilteredProducts] = useState(products)
+  const [filteredProducts, setFilteredProducts] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [localProducts, setLocalProducts] = useState<any[]>([])
+
+  // Inicializar produtos locais quando os produtos externos mudarem
+  useEffect(() => {
+    if (products && products.length > 0) {
+      setLocalProducts(products)
+      setFilteredProducts(products)
+    }
+  }, [products])
 
   // Filtrar produtos quando o termo de pesquisa mudar
   useEffect(() => {
     if (!searchTerm) {
-      setFilteredProducts(products)
+      setFilteredProducts(localProducts)
       return
     }
 
     const lowerSearchTerm = searchTerm.toLowerCase()
-    const filtered = products.filter(
+    const filtered = localProducts.filter(
       (product) =>
         product.productName.toLowerCase().includes(lowerSearchTerm) ||
         product.itemId.toString().includes(lowerSearchTerm),
     )
     setFilteredProducts(filtered)
-  }, [searchTerm, products])
+  }, [searchTerm, localProducts])
 
   // Buscar produtos se não houver nenhum
   useEffect(() => {
-    if (products.length === 0) {
+    if (localProducts.length === 0) {
       const fetchProducts = async () => {
         setIsLoading(true)
         try {
           const response = await fetch("/api/products")
           if (response.ok) {
             const data = await response.json()
-            setFilteredProducts(data.products || [])
+            if (data.products && Array.isArray(data.products)) {
+              setLocalProducts(data.products)
+              setFilteredProducts(data.products)
+            }
           }
         } catch (error) {
           console.error("Error fetching products:", error)
@@ -55,10 +67,22 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
 
       fetchProducts()
     }
-  }, [products])
+  }, [localProducts.length])
 
   // Encontrar o produto selecionado
-  const selectedProduct = products.find((product) => product.itemId === value)
+  const selectedProduct = localProducts.find((product) => product.itemId === value)
+
+  // Verificar se o valor selecionado existe nos produtos disponíveis
+  useEffect(() => {
+    if (value && localProducts.length > 0) {
+      const productExists = localProducts.some((p) => p.itemId === value)
+      if (!productExists) {
+        console.log("ProductSelector: Produto selecionado não encontrado:", value)
+      } else {
+        console.log("ProductSelector: Produto selecionado encontrado:", value)
+      }
+    }
+  }, [value, localProducts])
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -75,11 +99,9 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               <span>Carregando produtos...</span>
             </div>
-          ) : value ? (
+          ) : value && selectedProduct ? (
             <div className="flex items-center">
-              <span className="truncate max-w-[300px]">
-                {selectedProduct ? selectedProduct.productName : "Selecione um produto"}
-              </span>
+              <span className="truncate max-w-[300px]">{selectedProduct.productName}</span>
             </div>
           ) : (
             "Selecione um produto"
@@ -103,6 +125,7 @@ export function ProductSelector({ products, value, onChange }: ProductSelectorPr
                   key={product.itemId}
                   value={product.itemId}
                   onSelect={(currentValue) => {
+                    console.log("Produto selecionado:", currentValue)
                     onChange(currentValue === value ? "" : currentValue)
                     setOpen(false)
                   }}
