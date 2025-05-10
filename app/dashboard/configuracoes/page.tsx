@@ -1,5 +1,5 @@
-import { Dashboard } from "@/components/dashboard"
+import { ConfiguracoesIntegradas } from "@/components/configuracoes-integradas"
 
 export default function ConfiguracoesPage() {
-  return <Dashboard />
+  return <ConfiguracoesIntegradas />
 }
