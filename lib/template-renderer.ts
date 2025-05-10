@@ -22,6 +22,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
   // Configurações de estilo baseadas no formato escolhido
   const styleConfig = getStyleConfig(style)
 
+  // Adicionar prefixo a todas as classes CSS para evitar conflitos
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -32,14 +33,14 @@ export function renderProductCardTemplate(product: any, description: string, sty
   <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
   <style>
     /* Reset e configurações básicas */
-    * {
+    .sm-card-container * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
       font-family: 'Bruno Ace SC', sans-serif;
     }
 
-    body {
+    .sm-card-container {
       width: ${styleConfig.width};
       height: ${styleConfig.height};
       background: #0f0f0f;
@@ -52,7 +53,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Background animado */
-    .background {
+    .sm-background {
       position: absolute;
       top: 0;
       left: 0;
@@ -60,19 +61,19 @@ export function renderProductCardTemplate(product: any, description: string, sty
       height: 100%;
       background: linear-gradient(45deg, #6a00f4, #00e0ff, #6a00f4);
       background-size: 400% 400%;
-      animation: gradientBG 8s ease infinite;
+      animation: sm-gradientBG 8s ease infinite;
       opacity: 0.15;
       z-index: 0;
     }
 
-    @keyframes gradientBG {
+    @keyframes sm-gradientBG {
       0% { background-position: 0% 50%; }
       50% { background-position: 100% 50%; }
       100% { background-position: 0% 50%; }
     }
 
     /* Logo */
-    .logo {
+    .sm-logo {
       position: absolute;
       top: 20px;
       left: 20px;
@@ -85,18 +86,18 @@ export function renderProductCardTemplate(product: any, description: string, sty
       -webkit-background-clip: text;
       color: transparent;
       -webkit-text-fill-color: transparent;
-      animation: logoGradient 5s ease infinite;
+      animation: sm-logoGradient 5s ease infinite;
       filter: drop-shadow(0 2px 12px #b155ff88);
     }
 
-    @keyframes logoGradient {
+    @keyframes sm-logoGradient {
       0% { background-position: 0% 50%; }
       50% { background-position: 100% 50%; }
       100% { background-position: 0% 50%; }
     }
 
     /* Card principal */
-    .card {
+    .sm-card {
       position: relative;
       width: ${styleConfig.cardWidth};
       display: flex;
@@ -112,7 +113,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Imagem do produto */
-    .product-image-container {
+    .sm-product-image-container {
       width: 100%;
       height: ${styleConfig.imageHeight};
       margin: 15px 0;
@@ -123,7 +124,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       border-radius: 15px;
     }
 
-    .product-image {
+    .sm-product-image {
       width: 100%;
       height: 100%;
       object-fit: contain;
@@ -132,7 +133,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Título do produto */
-    .product-title {
+    .sm-product-title {
       font-size: ${styleConfig.fontSize.title};
       line-height: 1.2;
       text-align: center;
@@ -148,7 +149,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Preço */
-    .price-container {
+    .sm-price-container {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -157,20 +158,20 @@ export function renderProductCardTemplate(product: any, description: string, sty
       gap: 10px;
     }
 
-    .current-price {
+    .sm-current-price {
       font-size: ${styleConfig.fontSize.price};
       color: #ff0055;
       text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
     }
 
-    .original-price {
+    .sm-original-price {
       font-size: ${styleConfig.fontSize.oldPrice};
       color: #cccccc;
       text-decoration: line-through;
       opacity: 0.7;
     }
 
-    .discount-badge {
+    .sm-discount-badge {
       background: #ff0055;
       color: white;
       font-size: ${styleConfig.fontSize.discount};
@@ -181,7 +182,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Descrição */
-    .product-description {
+    .sm-product-description {
       font-size: ${styleConfig.fontSize.desc};
       color: #cccccc;
       margin: 15px 0;
@@ -193,18 +194,18 @@ export function renderProductCardTemplate(product: any, description: string, sty
     }
 
     /* Informações adicionais */
-    .product-info {
+    .sm-product-info {
       font-size: ${styleConfig.fontSize.info};
       margin: 10px 0;
       color: #cccccc;
     }
 
-    .star-rating {
+    .sm-star-rating {
       color: #ffd700;
     }
 
     /* Botão de compra */
-    .buy-button {
+    .sm-buy-button {
       display: inline-block;
       margin-top: 20px;
       padding: 15px 40px;
@@ -218,7 +219,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       transition: transform 0.3s, box-shadow 0.3s;
     }
 
-    .buy-button:hover {
+    .sm-buy-button:hover {
       transform: translateY(-5px);
       box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
     }
@@ -226,29 +227,31 @@ export function renderProductCardTemplate(product: any, description: string, sty
 </head>
 
 <body>
-  <div class="background"></div>
-  <div class="logo">Sales Martins</div>
-  
-  <div class="card">
-    <h1 class="product-title">${product.productName}</h1>
+  <div class="sm-card-container">
+    <div class="sm-background"></div>
+    <div class="sm-logo">Sales Martins</div>
     
-    <div class="product-image-container">
-      <img src="${product.imageUrl}" alt="${product.productName}" class="product-image" />
+    <div class="sm-card">
+      <h1 class="sm-product-title">${product.productName}</h1>
+      
+      <div class="sm-product-image-container">
+        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image" />
+      </div>
+      
+      <div class="sm-price-container">
+        <p class="sm-current-price">R$ ${currentPrice.toFixed(2)}</p>
+        ${originalPrice ? `<p class="sm-original-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
+        ${discountPercentage ? `<span class="sm-discount-badge">-${discountPercentage}%</span>` : ""}
+      </div>
+      
+      <p class="sm-product-description">${description}</p>
+      
+      <p class="sm-product-info">
+        <span class="sm-star-rating">★★★★★</span> ${product.ratingStar || "4.5"} | Vendas: ${product.sales}+
+      </p>
+      
+      <a href="${product.offerLink}" target="_blank" class="sm-buy-button">COMPRAR AGORA</a>
     </div>
-    
-    <div class="price-container">
-      <p class="current-price">R$ ${currentPrice.toFixed(2)}</p>
-      ${originalPrice ? `<p class="original-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
-      ${discountPercentage ? `<span class="discount-badge">-${discountPercentage}%</span>` : ""}
-    </div>
-    
-    <p class="product-description">${description}</p>
-    
-    <p class="product-info">
-      <span class="star-rating">★★★★★</span> ${product.ratingStar || "4.5"} | Vendas: ${product.sales}+
-    </p>
-    
-    <a href="${product.offerLink}" target="_blank" class="buy-button">COMPRAR AGORA</a>
   </div>
 </body>
 </html>`
