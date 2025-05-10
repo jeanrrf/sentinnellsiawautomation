@@ -57,6 +57,7 @@ export function CacheViewer() {
       toast({
         title: "Vídeo excluído",
         description: "O vídeo foi excluído com sucesso",
+        variant: "success",
       })
 
       // Refresh videos list
@@ -87,6 +88,7 @@ export function CacheViewer() {
       toast({
         title: "Vídeo publicado",
         description: "O vídeo foi enviado para publicação no TikTok",
+        variant: "success",
       })
 
       // Refresh videos list

@@ -32,6 +32,7 @@ export function CacheCleaner() {
       toast({
         title: "Cache limpo com sucesso",
         description: `Todo o cache foi limpo em ${now}`,
+        variant: "success",
       })
     } catch (error: any) {
       console.error("Erro ao limpar cache:", error)
