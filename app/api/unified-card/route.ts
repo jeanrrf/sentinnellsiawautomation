@@ -10,19 +10,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     // Extrair dados com validação adequada
-    const { product, config = {}, action = "generate" } = body
-
-    // Validar ação
-    if (!["generate", "schedule", "execute-schedule", "get-history", "get-schedules"].includes(action)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Ação inválida",
-          message: "AVISO: A ação especificada não é suportada.",
-        },
-        { status: 400 },
-      )
-    }
+    const { product, config = {}, action = "generate", scheduleId, schedule } = body
 
     // Obter serviço unificado
     const cardService = getUnifiedCardService()
@@ -58,8 +46,18 @@ export async function POST(request: NextRequest) {
           ...result,
         })
 
-      case "schedule":
-        if (!body.schedule) {
+      case "get-history":
+        logger.info("Solicitação de histórico de geração recebida")
+        const history = await cardService.getGenerationHistory(body.limit || 20)
+        return NextResponse.json({ success: true, history })
+
+      case "get-schedules":
+        logger.info("Solicitação de lista de agendamentos recebida")
+        const schedules = await cardService.getSchedules()
+        return NextResponse.json({ success: true, schedules })
+
+      case "save-schedule":
+        if (!schedule) {
           return NextResponse.json(
             {
               success: false,
@@ -71,19 +69,36 @@ export async function POST(request: NextRequest) {
         }
 
         logger.info("Solicitação de criação/atualização de agendamento recebida", {
-          scheduleId: body.schedule.id,
+          scheduleId: schedule.id,
         })
 
-        // Salvar agendamento
-        const saveResult = await cardService.saveSchedule(body.schedule)
-
+        const saveResult = await cardService.saveSchedule(schedule)
         return NextResponse.json({
           success: saveResult,
           message: saveResult ? "Agendamento salvo com sucesso" : "AVISO: Não foi possível salvar o agendamento.",
         })
 
+      case "delete-schedule":
+        if (!scheduleId) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: "ID do agendamento não fornecido",
+              message: "AVISO: É necessário fornecer o ID do agendamento a ser excluído.",
+            },
+            { status: 400 },
+          )
+        }
+
+        logger.info("Solicitação de exclusão de agendamento recebida", { scheduleId })
+        const deleteResult = await cardService.deleteSchedule(scheduleId)
+        return NextResponse.json({
+          success: deleteResult,
+          message: deleteResult ? "Agendamento excluído com sucesso" : "AVISO: Não foi possível excluir o agendamento.",
+        })
+
       case "execute-schedule":
-        if (!body.scheduleId) {
+        if (!scheduleId) {
           return NextResponse.json(
             {
               success: false,
@@ -94,48 +109,18 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        logger.info("Solicitação de execução de agendamento recebida", {
-          scheduleId: body.scheduleId,
-        })
-
-        // Executar agendamento
-        const executeResult = await cardService.executeScheduledGeneration(body.scheduleId)
-
-        return NextResponse.json({
-          success: executeResult.success,
-          results: executeResult.results,
-        })
-
-      case "get-history":
-        logger.info("Solicitação de histórico de geração recebida")
-
-        // Obter histórico
-        const history = await cardService.getGenerationHistory(body.limit || 20)
-
-        return NextResponse.json({
-          success: true,
-          history,
-        })
-
-      case "get-schedules":
-        logger.info("Solicitação de lista de agendamentos recebida")
-
-        // Obter agendamentos
-        const schedules = await cardService.getSchedules()
-
-        return NextResponse.json({
-          success: true,
-          schedules,
-        })
+        logger.info("Solicitação de execução de agendamento recebida", { scheduleId })
+        const executeResult = await cardService.executeScheduledGeneration(scheduleId)
+        return NextResponse.json({ success: executeResult.success, results: executeResult.results })
 
       default:
         return NextResponse.json(
           {
             success: false,
-            error: "Ação não implementada",
-            message: "AVISO: A ação especificada não está implementada.",
+            error: "Ação não suportada",
+            message: "AVISO: A ação especificada não é suportada.",
           },
-          { status: 501 },
+          { status: 400 },
         )
     }
   } catch (error: any) {

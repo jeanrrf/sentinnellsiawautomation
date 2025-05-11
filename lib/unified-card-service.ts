@@ -7,9 +7,8 @@ const logger = createLogger("unified-card-service")
 
 // Tipos de geração
 export enum GenerationMode {
-  MANUAL = "manual", // Designer - controle total
-  QUICK = "quick", // Geração rápida - mínimas configurações
-  AUTOMATED = "automated", // Automação - execução agendada
+  MANUAL = "manual",
+  AUTOMATED = "automated",
 }
 
 // Configurações unificadas para geração de cards
@@ -143,10 +142,8 @@ export class UnifiedCardService {
         }
       }
 
-      // Salvar histórico de geração se não for modo manual
-      if (fullConfig.mode !== GenerationMode.MANUAL) {
-        await this.saveGenerationHistory(product, fullConfig, cardUrls)
-      }
+      // Salvar histórico de geração
+      await this.saveGenerationHistory(product, fullConfig, cardUrls)
 
       const generationTime = Date.now() - startTime
 
