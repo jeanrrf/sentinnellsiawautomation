@@ -9,18 +9,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import {
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  RefreshCw,
-  Film,
-  Database,
-  FileVideo,
-  Settings,
-  Terminal,
-  Info,
-} from "lucide-react"
+import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, Database, Settings, Terminal, Info } from "lucide-react"
 
 export function SystemStatusDashboard() {
   const [status, setStatus] = useState<"loading" | "operational" | "warning" | "error">("loading")
@@ -37,7 +26,7 @@ export function SystemStatusDashboard() {
 
     try {
       console.info("[SystemStatus] Verificando status do sistema...")
-      const response = await fetch("/api/video-system-check")
+      const response = await fetch("/api/system-check")
 
       if (!response.ok) {
         throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`)
@@ -80,7 +69,21 @@ export function SystemStatusDashboard() {
 
     try {
       console.info(`[SystemStatus] Testando componente: ${component}`)
-      const response = await fetch(`/api/test-component?component=${component}`)
+
+      // Adicionar timeout para evitar que a requisição fique pendente indefinidamente
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 segundos de timeout
+
+      const response = await fetch(`/api/test-component?component=${component}`, {
+        signal: controller.signal,
+      }).catch((error) => {
+        if (error.name === "AbortError") {
+          throw new Error("Timeout ao testar componente. A requisição demorou muito para responder.")
+        }
+        throw error
+      })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`)
@@ -108,8 +111,11 @@ export function SystemStatusDashboard() {
         ...prev,
         [component]: {
           status: "error",
-          message: "Erro ao executar teste",
-          details: error.message,
+          message: `Erro ao executar teste: ${error.message}`,
+          details: {
+            errorMessage: error.message,
+            errorType: error.name,
+          },
         },
       }))
       setErrorLogs((prev) => [...prev, `ERRO (${component}): ${error.message}`])
@@ -123,8 +129,6 @@ export function SystemStatusDashboard() {
 
     // Inicializar resultados de teste
     setTestResults({
-      ffmpeg: { status: "idle", message: "Não testado" },
-      puppeteer: { status: "idle", message: "Não testado" },
       redis: { status: "idle", message: "Não testado" },
       storage: { status: "idle", message: "Não testado" },
     })
@@ -167,7 +171,7 @@ export function SystemStatusDashboard() {
             {currentStatus.icon}
             Status do Sistema
           </CardTitle>
-          <CardDescription>Verificação dos componentes de geração de vídeo</CardDescription>
+          <CardDescription>Verificação dos componentes</CardDescription>
         </CardHeader>
         <CardContent>
           <Alert className={`${currentStatus.color} border-0`}>
@@ -178,16 +182,6 @@ export function SystemStatusDashboard() {
           {status !== "loading" && (
             <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
               <StatusCard
-                title="FFmpeg"
-                status={details?.binaries?.ffmpegPath ? "operational" : "error"}
-                icon={<Film className="h-4 w-4" />}
-              />
-              <StatusCard
-                title="Puppeteer"
-                status={details?.puppeteer?.available ? "operational" : "error"}
-                icon={<Terminal className="h-4 w-4" />}
-              />
-              <StatusCard
                 title="Redis"
                 status={details?.redis?.connected ? "operational" : "error"}
                 icon={<Database className="h-4 w-4" />}
@@ -195,7 +189,7 @@ export function SystemStatusDashboard() {
               <StatusCard
                 title="Armazenamento"
                 status={details?.storage?.writable ? "operational" : "error"}
-                icon={<FileVideo className="h-4 w-4" />}
+                icon={<Terminal className="h-4 w-4" />}
               />
             </div>
           )}
@@ -287,16 +281,6 @@ export function SystemStatusDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    <ComponentItem
-                      name="FFmpeg"
-                      status={details.binaries?.ffmpegPath ? "operational" : "error"}
-                      details={details.binaries?.ffmpegPath || "Não disponível"}
-                    />
-                    <ComponentItem
-                      name="FFprobe"
-                      status={details.binaries?.ffprobePath ? "operational" : "error"}
-                      details={details.binaries?.ffprobePath || "Não disponível"}
-                    />
                     <ComponentItem name="Node.js" status="operational" details={details.environment?.node || "N/A"} />
                     <ComponentItem
                       name="Redis"
@@ -318,28 +302,6 @@ export function SystemStatusDashboard() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <TestItem
-                  name="FFmpeg"
-                  description="Testa a capacidade de gerar vídeos com FFmpeg"
-                  status={testResults?.ffmpeg?.status}
-                  message={testResults?.ffmpeg?.message}
-                  details={testResults?.ffmpeg?.details}
-                  errorCode={testResults?.ffmpeg?.errorCode}
-                  onTest={() => runComponentTest("ffmpeg")}
-                  isRunning={isRunningTest && testResults?.ffmpeg?.status === "running"}
-                />
-
-                <TestItem
-                  name="Puppeteer"
-                  description="Testa a capacidade de renderizar HTML com Puppeteer"
-                  status={testResults?.puppeteer?.status}
-                  message={testResults?.puppeteer?.message}
-                  details={testResults?.puppeteer?.details}
-                  errorCode={testResults?.puppeteer?.errorCode}
-                  onTest={() => runComponentTest("puppeteer")}
-                  isRunning={isRunningTest && testResults?.puppeteer?.status === "running"}
-                />
-
                 <TestItem
                   name="Redis"
                   description="Testa a conexão com o Redis"
@@ -368,8 +330,6 @@ export function SystemStatusDashboard() {
                 variant="outline"
                 className="w-full"
                 onClick={() => {
-                  runComponentTest("ffmpeg")
-                  runComponentTest("puppeteer")
                   runComponentTest("redis")
                   runComponentTest("storage")
                 }}
@@ -398,21 +358,6 @@ export function SystemStatusDashboard() {
               {details?.config && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 gap-3">
-                    <ConfigItem
-                      name="FFMPEG_PATH"
-                      value={details.config.ffmpegPath}
-                      status={details.binaries?.ffmpegPath ? "success" : "error"}
-                    />
-                    <ConfigItem
-                      name="FFPROBE_PATH"
-                      value={details.config.ffprobePath}
-                      status={details.binaries?.ffprobePath ? "success" : "error"}
-                    />
-                    <ConfigItem
-                      name="TEMP_DIR"
-                      value={details.config.tempDir}
-                      status={details.storage?.writable ? "success" : "error"}
-                    />
                     <ConfigItem name="NODE_ENV" value={process.env.NODE_ENV || "development"} status="success" />
                     <ConfigItem name="VERCEL" value={process.env.VERCEL === "1" ? "Sim" : "Não"} status="success" />
                   </div>

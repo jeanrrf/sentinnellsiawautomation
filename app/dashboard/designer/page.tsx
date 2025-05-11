@@ -1,5 +1,5 @@
 import { Suspense } from "react"
-import { VideoGeneratorPro } from "@/components/video-generator-pro"
+import { ImageGeneratorPro } from "@/components/image-generator-pro"
 import { getCachedProducts } from "@/lib/redis"
 
 export const dynamic = "force-dynamic"
@@ -19,14 +19,14 @@ export default async function DesignerPage() {
   const products = await getProducts()
 
   return (
-    <div className="container mx-auto py-6">
-      <h1 className="text-3xl font-bold mb-6">Gerador de Vídeos Profissional</h1>
+    <div className="container mx-auto py-6 max-w-full px-4">
+      <h1 className="text-3xl font-bold mb-6">Gerador de Imagens Profissional</h1>
       <p className="text-muted-foreground mb-6">
-        Crie vídeos de alta qualidade para TikTok e outras plataformas a partir dos seus produtos da Shopee.
+        Crie imagens de alta qualidade para TikTok e outras plataformas a partir dos seus produtos da Shopee.
       </p>
 
       <Suspense fallback={<div>Carregando produtos...</div>}>
-        <VideoGeneratorPro products={products} />
+        <ImageGeneratorPro products={products} />
       </Suspense>
     </div>
   )

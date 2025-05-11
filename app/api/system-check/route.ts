@@ -1,146 +1,141 @@
 import { NextResponse } from "next/server"
-import fs from "fs"
-import path from "path"
+import { createLogger, ErrorCodes } from "@/lib/logger"
+import os from "os"
+
+const logger = createLogger("API:SystemCheck")
 
 export async function GET() {
+  const startTime = Date.now()
+  logger.info("Iniciando verificação de status do sistema")
+
   try {
-    // Collect system information
-    const systemInfo = {
-      timestamp: new Date().toISOString(),
-      environment: {
-        node: process.version,
-        platform: process.platform,
-        arch: process.arch,
-        isVercel: process.env.VERCEL === "1",
-      },
-      env: {
-        SHOPEE_APP_ID: !!process.env.SHOPEE_APP_ID,
-        SHOPEE_APP_SECRET: !!process.env.SHOPEE_APP_SECRET,
-        SHOPEE_AFFILIATE_API_URL: !!process.env.SHOPEE_AFFILIATE_API_URL,
-        GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
-      },
-    }
-
-    // Check if we're in Vercel environment
-    const isVercel = process.env.VERCEL === "1"
-
-    // Database status object
-    let dbStatus = {
-      dirExists: false,
-      files: [],
-      productFile: {
-        exists: false,
-        size: 0,
-        lastModified: null,
-        content: null,
-      },
-    }
-
-    // Only try to access the file system if we're not in Vercel
-    if (!isVercel) {
-      try {
-        // Check database
-        const dataDir = path.join(process.cwd(), "database")
-
-        if (fs.existsSync(dataDir)) {
-          dbStatus.dirExists = true
-          dbStatus.files = fs.readdirSync(dataDir)
-
-          // Check product file
-          const productFilePath = path.join(dataDir, "top5_sellers_20250508_170958.json")
-          if (fs.existsSync(productFilePath)) {
-            const stats = fs.statSync(productFilePath)
-            dbStatus.productFile.exists = true
-            dbStatus.productFile.size = stats.size
-            dbStatus.productFile.lastModified = stats.mtime.toISOString()
-
-            // Read file content
-            try {
-              const rawData = fs.readFileSync(productFilePath, "utf-8")
-              const data = JSON.parse(rawData)
-              dbStatus.productFile.content = {
-                success: data.success,
-                total: data.total,
-                productCount: data.best_sellers?.length || 0,
-                firstProduct: data.best_sellers?.[0]
-                  ? {
-                      itemId: data.best_sellers[0].itemId,
-                      productName: data.best_sellers[0].productName,
-                    }
-                  : null,
-              }
-            } catch (e) {
-              dbStatus.productFile.content = { error: `Failed to parse JSON: ${e.message}` }
-            }
-          }
-        }
-      } catch (fsError) {
-        console.error("File system error:", fsError)
-        dbStatus = {
-          ...dbStatus,
-          error: `File system error: ${fsError.message}`,
-        }
-      }
-    } else {
-      dbStatus = {
-        ...dbStatus,
-        note: "File system checks skipped in Vercel environment",
-      }
-    }
-
-    // Test products API
-    let productsApiTest = { attempted: false }
+    // Verificar Redis
+    let redisStatus = { connected: false, info: "Não verificado" }
     try {
-      productsApiTest.attempted = true
-
-      // Use relative URL to avoid localhost issues in production
-      const apiUrl = "/api/products"
-      const response = await fetch(new URL(apiUrl, "https://example.com"))
-
-      if (!response.ok) {
-        productsApiTest = {
-          ...productsApiTest,
-          success: false,
-          status: response.status,
-          statusText: response.statusText,
-        }
-      } else {
-        const data = await response.json()
-        productsApiTest = {
-          ...productsApiTest,
-          success: true,
-          productCount: data.products?.length || 0,
-          firstProduct: data.products?.[0]
-            ? {
-                itemId: data.products[0].itemId,
-                productName: data.products[0].productName,
-              }
-            : null,
-        }
+      const { isRedisAvailable } = await import("@/lib/redis")
+      const isConnected = await isRedisAvailable()
+      redisStatus = {
+        connected: isConnected,
+        info: isConnected ? "Conectado" : "Falha na conexão",
       }
-    } catch (apiError) {
-      productsApiTest = {
-        ...productsApiTest,
-        success: false,
-        error: `API error: ${apiError.message}`,
+    } catch (error) {
+      logger.error("Erro ao verificar Redis:", error)
+      redisStatus = {
+        connected: false,
+        info: `Erro: ${error.message}`,
       }
     }
 
-    return NextResponse.json({
-      systemInfo,
-      database: dbStatus,
-      productsApi: productsApiTest,
-    })
-  } catch (error) {
-    console.error("System check error:", error)
+    // Verificar armazenamento
+    let storageStatus = { writable: false, info: "Não verificado" }
+    try {
+      const fs = await import("fs/promises")
+      const path = await import("path")
+      const tempDir = process.env.TEMP_DIR || path.join(os.tmpdir(), "shopee-tiktok-test")
 
-    // Return a more detailed error response
+      // Verificar se o diretório existe
+      try {
+        await fs.access(tempDir)
+      } catch {
+        // Criar diretório se não existir
+        await fs.mkdir(tempDir, { recursive: true })
+      }
+
+      // Testar escrita
+      const testFile = path.join(tempDir, `test-file-${Date.now()}.txt`)
+      await fs.writeFile(testFile, "Test content")
+
+      // Testar leitura
+      const content = await fs.readFile(testFile, "utf-8")
+      const readSuccess = content === "Test content"
+
+      // Testar exclusão
+      await fs.unlink(testFile)
+
+      storageStatus = {
+        writable: true,
+        info: "Sistema de arquivos operacional",
+      }
+    } catch (error) {
+      logger.error("Erro ao verificar armazenamento:", error)
+      storageStatus = {
+        writable: false,
+        info: `Erro: ${error.message}`,
+      }
+    }
+
+    // Informações do ambiente
+    const environment = {
+      node: process.version,
+      platform: process.platform,
+      arch: process.arch,
+      cpus: `${os.cpus().length} cores`,
+      memory: `${Math.round(os.totalmem() / (1024 * 1024 * 1024))} GB`,
+    }
+
+    // Informações de recursos
+    const memoryUsage = process.memoryUsage()
+    const resources = {
+      memoryUsage: `${Math.round(memoryUsage.rss / (1024 * 1024))} MB`,
+      memoryPercentage: Math.round((memoryUsage.rss / os.totalmem()) * 100),
+      elapsedTime: `${Date.now() - startTime} ms`,
+      timePercentage: 0, // Não aplicável
+    }
+
+    // Configuração
+    const config = {
+      tempDir: process.env.TEMP_DIR || os.tmpdir(),
+      nodeEnv: process.env.NODE_ENV || "development",
+      vercel: process.env.VERCEL === "1" ? "Sim" : "Não",
+    }
+
+    // Verificar se há avisos
+    const warnings = []
+    if (!redisStatus.connected) {
+      warnings.push({
+        component: "Redis",
+        message: "Conexão com Redis falhou",
+        code: ErrorCodes.CACHE.CONNECTION_FAILED,
+      })
+    }
+
+    if (!storageStatus.writable) {
+      warnings.push({
+        component: "Storage",
+        message: "Sistema de arquivos não está operacional",
+        code: ErrorCodes.STORAGE.WRITE_FAILED,
+      })
+    }
+
+    const result = {
+      success: true,
+      timestamp: new Date().toISOString(),
+      redis: redisStatus,
+      storage: storageStatus,
+      environment,
+      resources,
+      config,
+      warnings: warnings.length > 0 ? warnings : null,
+    }
+
+    logger.info("Verificação de status do sistema concluída", {
+      context: {
+        redis: redisStatus.connected,
+        storage: storageStatus.writable,
+        warnings: warnings.length,
+      },
+    })
+
+    return NextResponse.json(result)
+  } catch (error) {
+    logger.error("Erro ao verificar status do sistema:", error)
+
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Unknown error",
-        stack: process.env.NODE_ENV !== "production" ? error.stack : undefined,
         timestamp: new Date().toISOString(),
+        error: error.message,
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 },
     )

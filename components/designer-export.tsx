@@ -7,13 +7,23 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Loader2, Video, AlertCircle, ExternalLink, Copy, RefreshCw } from "lucide-react"
+import {
+  Loader2,
+  ImageIcon,
+  AlertCircle,
+  ExternalLink,
+  Copy,
+  RefreshCw,
+  Download,
+  FileText,
+  Maximize2,
+  Minimize2,
+} from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
-import { VideoGeneratorPro } from "@/components/video-generator-pro"
 
 /**
  * DesignerExport - Componente principal para criação e geração de cards para TikTok
@@ -31,21 +41,20 @@ export function DesignerExport() {
   const [generationProgress, setGenerationProgress] = useState(0)
   const [htmlTemplate, setHtmlTemplate] = useState("")
   const [previewUrl, setPreviewUrl] = useState("")
-  const [videoUrl, setVideoUrl] = useState("")
-  const [videoGenerated, setVideoGenerated] = useState(false)
-  const [videoData, setVideoData] = useState<any>(null)
+  const [cardUrl, setCardUrl] = useState("")
+  const [cardGenerated, setCardGenerated] = useState(false)
+  const [cardData, setCardData] = useState<any>(null)
 
   // Estados para configuração do card
   const [useAI, setUseAI] = useState(true)
   const [customDescription, setCustomDescription] = useState("")
-  const [videoStyle, setVideoStyle] = useState("portrait")
+  const [cardStyle, setCardStyle] = useState("portrait")
 
   // Estados para controle da interface
   const [activeTab, setActiveTab] = useState("preview")
   const [previewError, setPreviewError] = useState(false)
-  const [isRecording, setIsRecording] = useState(isRecording)
-  const [recordingDuration, setRecordingDuration] = useState(5)
   const [isPreviewLoading, setIsPreviewLoading] = useState(false)
+  const [compactMode, setCompactMode] = useState(true)
 
   // Estado para mensagens de toast
   const [toastMessage, setToastMessage] = useState<{
@@ -58,18 +67,16 @@ export function DesignerExport() {
   // Referências para manipulação do DOM
   const previewContainerRef = useRef<HTMLDivElement>(null)
   const tiktokPreviewRef = useRef<HTMLDivElement>(null)
-  const videoContainerRef = useRef<HTMLDivElement>(null)
+  const cardContainerRef = useRef<HTMLDivElement>(null)
 
   // Verificar se o ToastProvider está disponível
   const { toast } = useToast()
   const toastAvailable = true
-  // try {
-  //   // eslint-disable-next-line react-hooks/rules-of-hooks
-  //   const { toast } = useToast()
-  //   toastAvailable = true
-  // } catch (e) {
-  //   toastAvailable = false
-  // }
+
+  // Add these new states to the component
+  const [postDescription, setPostDescription] = useState("")
+  const [isEditingDescription, setIsEditingDescription] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
 
   // Função para mostrar toast
   const showToast = (title: string, description: string, variant?: "default" | "destructive") => {
@@ -131,8 +138,8 @@ export function DesignerExport() {
       if (previewContainerRef.current) {
         previewContainerRef.current.innerHTML = ""
       }
-      if (videoContainerRef.current) {
-        videoContainerRef.current.innerHTML = ""
+      if (cardContainerRef.current) {
+        cardContainerRef.current.innerHTML = ""
       }
     }
   }, [])
@@ -205,41 +212,26 @@ export function DesignerExport() {
     }
   }, [htmlTemplate])
 
-  // Renderizar o vídeo quando gerado
-  useEffect(() => {
-    if (videoGenerated && htmlTemplate && videoContainerRef.current) {
-      try {
-        // Limpar o conteúdo anterior
-        videoContainerRef.current.innerHTML = ""
+  // Add this new function to generate post description
+  const generatePostDescription = (product) => {
+    if (!product) return ""
 
-        // Criar um iframe isolado para o vídeo
-        const iframe = document.createElement("iframe")
-        iframe.style.width = "100%"
-        iframe.style.height = "100%"
-        iframe.style.border = "none"
-        iframe.style.overflow = "hidden"
-        iframe.title = "Video Preview"
-        iframe.sandbox.add("allow-same-origin")
+    const price = Number.parseFloat(product.price)
+    const productName = product.productName || "Produto"
+    const offerLink = product.offerLink || "#"
 
-        // Adicionar ao container
-        videoContainerRef.current.appendChild(iframe)
+    return `🔥 SUPER OFERTA! 🔥
 
-        // Escrever o conteúdo no iframe após ele ser carregado
-        iframe.onload = () => {
-          if (iframe.contentDocument) {
-            iframe.contentDocument.open()
-            iframe.contentDocument.write(htmlTemplate)
-            iframe.contentDocument.close()
-          }
-        }
+${productName}
 
-        // Iniciar o carregamento
-        iframe.src = "about:blank"
-      } catch (error) {
-        console.error("Erro ao renderizar vídeo:", error)
-      }
-    }
-  }, [videoGenerated, htmlTemplate, activeTab])
+💰 Apenas R$${price.toFixed(2)}
+🛒 Produto de alta qualidade com ótimo preço!
+
+📲 LINK NA BIO ou acesse diretamente:
+${offerLink}
+
+#oferta #shopee #desconto #promocao`
+  }
 
   /**
    * Simula o progresso da geração do card
@@ -271,7 +263,7 @@ export function DesignerExport() {
     setIsGenerating(true)
     setGenerationStep("Iniciando geração do card...")
     const stopProgress = simulateProgress()
-    setVideoGenerated(false)
+    setCardGenerated(false)
     setIsPreviewLoading(true)
 
     try {
@@ -285,8 +277,8 @@ export function DesignerExport() {
         throw new Error(`Produto com ID ${selectedProduct} não encontrado na lista de produtos.`)
       }
 
-      // Fazer a requisição para a API de geração de vídeo
-      const response = await fetch("/api/generate-video", {
+      // Fazer a requisição para a API de geração de card
+      const response = await fetch("/api/generate-product-card", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -295,37 +287,59 @@ export function DesignerExport() {
           productId: selectedProduct,
           useAI,
           customDescription: useAI ? undefined : customDescription,
-          videoStyle,
+          style: cardStyle,
         }),
       })
 
       if (!response.ok) {
-        throw new Error(`Falha ao gerar vídeo: ${response.status} ${response.statusText}`)
+        throw new Error(`Falha ao gerar card: ${response.status} ${response.statusText}`)
       }
 
-      const data = await response.json()
+      // Check if the response is HTML
+      const contentType = response.headers.get("Content-Type") || ""
 
-      if (!data.success) {
-        throw new Error(data.message || "Falha ao gerar vídeo")
+      if (contentType.includes("text/html")) {
+        // Get the HTML content
+        const htmlContent = await response.text()
+        setHtmlTemplate(htmlContent)
+
+        // Create a data URL for preview
+        const htmlBlob = new Blob([htmlContent], { type: "text/html" })
+        const imageUrl = URL.createObjectURL(htmlBlob)
+        setCardUrl(imageUrl)
+      } else {
+        // Handle as before for backward compatibility
+        const imageBlob = await response.blob()
+        const imageUrl = URL.createObjectURL(imageBlob)
+        setCardUrl(imageUrl)
       }
 
-      // Dentro da função handleGenerate, após receber a resposta da API
-      console.log("Resposta da API:", data)
-      console.log("HTML Template recebido:", data.htmlTemplate ? `${data.htmlTemplate.substring(0, 100)}...` : "Nenhum")
-      console.log("Preview URL:", previewUrl)
+      // Também buscar o HTML para preview
+      const previewResponse = await fetch(`/api/preview/${selectedProduct}?style=${cardStyle}`)
+      if (previewResponse.ok) {
+        const htmlContent = await previewResponse.text()
+        setHtmlTemplate(htmlContent)
+      }
 
-      setHtmlTemplate(data.htmlTemplate)
       const timestamp = Date.now()
-      setPreviewUrl(`/api/preview/${selectedProduct}?style=${videoStyle}&t=${timestamp}`)
+      setPreviewUrl(`/api/preview/${selectedProduct}?style=${cardStyle}&t=${timestamp}`)
 
       setGenerationProgress(100)
+      setCardGenerated(true)
+
+      // Generate post description
+      const selectedProductData = products.find((p) => p.itemId === selectedProduct)
+      if (selectedProductData) {
+        const generatedDescription = generatePostDescription(selectedProductData)
+        setPostDescription(generatedDescription)
+      }
 
       // Mudar para a aba de preview automaticamente
       setActiveTab("preview")
 
-      showToast("Card gerado com sucesso", "Você pode visualizar o card na aba de preview")
+      showToast("Card gerado com sucesso", "Você pode visualizar e baixar o card")
     } catch (error: any) {
-      console.error("Erro ao gerar vídeo:", error)
+      console.error("Erro ao gerar card:", error)
       console.error("Stack trace:", error.stack)
       setGenerationProgress(0)
       setHtmlTemplate("") // Limpar o template em caso de erro
@@ -347,65 +361,58 @@ export function DesignerExport() {
     }
   }
 
-  /**
-   * Manipula a gravação do vídeo
-   */
-  const handleRecordVideo = async () => {
-    if (!previewUrl || !htmlTemplate) {
-      showToast("Erro ao gravar vídeo", "Gere um card primeiro", "destructive")
-      return
-    }
+  // Add this new function for downloading the post description
+  const handleDownloadDescription = () => {
+    if (!postDescription) return
 
-    setIsRecording(true)
+    const blob = new Blob([postDescription], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `descricao-produto-${selectedProduct}-${Date.now()}.txt`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+
+    showToast("Descrição baixada", "A descrição do post foi baixada com sucesso")
+  }
+
+  // Update the handleDownloadCard function to download both files
+  const handleDownloadCard = async () => {
+    if (!cardUrl) return
+
+    setIsDownloading(true)
 
     try {
-      // Simular gravação de vídeo
-      showToast("Gravando vídeo", `Gravando vídeo de ${recordingDuration} segundos...`)
+      // Download the card image
+      const a = document.createElement("a")
+      a.href = cardUrl
+      a.download = `produto-${selectedProduct}-${Date.now()}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
 
-      // Simular tempo de gravação
-      await new Promise((resolve) => setTimeout(resolve, recordingDuration * 1000))
+      // Small delay to ensure downloads don't conflict
+      await new Promise((resolve) => setTimeout(resolve, 500))
 
-      // Verificar se o produto existe na lista
-      const productExists = products.some((p) => p.itemId === selectedProduct)
-      if (!productExists) {
-        throw new Error(`Produto com ID ${selectedProduct} não encontrado na lista de produtos.`)
+      // Download the description
+      if (postDescription) {
+        const blob = new Blob([postDescription], { type: "text/plain" })
+        const url = URL.createObjectURL(blob)
+        const b = document.createElement("a")
+        b.href = url
+        b.download = `descricao-produto-${selectedProduct}-${Date.now()}.txt`
+        document.body.appendChild(b)
+        b.click()
+        document.body.removeChild(b)
       }
 
-      // Simular salvamento no Redis
-      const response = await fetch("/api/save-video", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          productId: selectedProduct,
-          duration: recordingDuration,
-          htmlTemplate: htmlTemplate, // Passar o HTML template diretamente
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar o vídeo")
-      }
-
-      const data = await response.json()
-
-      if (data.success && data.video) {
-        // Definir a URL do vídeo para exibição
-        setVideoUrl(data.video.videoUrl)
-        setVideoData(data.video)
-        setVideoGenerated(true)
-
-        // Mudar para a aba de vídeo para mostrar o resultado
-        setActiveTab("video")
-      }
-
-      showToast("Vídeo gravado com sucesso", "O vídeo foi salvo e está pronto para ser publicado")
-    } catch (error: any) {
-      console.error("Erro ao gravar vídeo:", error)
-      showToast("Erro ao gravar vídeo", error.message, "destructive")
+      showToast("Download completo", "O card e a descrição foram baixados com sucesso")
+    } catch (error) {
+      console.error("Erro ao baixar arquivos:", error)
+      showToast("Erro no download", "Ocorreu um erro ao baixar os arquivos", "destructive")
     } finally {
-      setIsRecording(false)
+      setIsDownloading(false)
     }
   }
 
@@ -417,10 +424,10 @@ export function DesignerExport() {
     let width = 1080
     let height = 1920
 
-    if (videoStyle === "square") {
+    if (cardStyle === "square") {
       width = 1080
       height = 1080
-    } else if (videoStyle === "landscape") {
+    } else if (cardStyle === "landscape") {
       width = 1920
       height = 1080
     }
@@ -483,8 +490,13 @@ export function DesignerExport() {
     }, 1000)
   }
 
+  // Toggle compact mode
+  const toggleCompactMode = () => {
+    setCompactMode(!compactMode)
+  }
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[1fr_375px] gap-4 mt-2">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
       {/* Toast fallback quando o ToastProvider não está disponível */}
       {toastMessage && toastMessage.visible && (
         <div
@@ -563,37 +575,17 @@ export function DesignerExport() {
           </div>
 
           <div className="space-y-1">
-            <Label htmlFor="videoStyle" className="text-sm">
+            <Label htmlFor="cardStyle" className="text-sm">
               Estilo do Card
             </Label>
-            <Select value={videoStyle} onValueChange={setVideoStyle}>
-              <SelectTrigger id="videoStyle" className="h-8 text-sm">
+            <Select value={cardStyle} onValueChange={setCardStyle}>
+              <SelectTrigger id="cardStyle" className="h-8 text-sm">
                 <SelectValue placeholder="Selecione o estilo do card" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="portrait">Retrato (9:16)</SelectItem>
                 <SelectItem value="square">Quadrado (1:1)</SelectItem>
                 <SelectItem value="landscape">Paisagem (16:9)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1">
-            <Label htmlFor="recordingDuration" className="text-sm">
-              Duração do Vídeo (segundos)
-            </Label>
-            <Select
-              value={recordingDuration.toString()}
-              onValueChange={(value) => setRecordingDuration(Number.parseInt(value))}
-            >
-              <SelectTrigger id="recordingDuration" className="h-8 text-sm">
-                <SelectValue placeholder="Selecione a duração" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="3">3 segundos</SelectItem>
-                <SelectItem value="5">5 segundos</SelectItem>
-                <SelectItem value="7">7 segundos</SelectItem>
-                <SelectItem value="10">10 segundos</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -617,7 +609,7 @@ export function DesignerExport() {
               </>
             ) : (
               <>
-                <Video className="mr-2 h-3 w-3" />
+                <ImageIcon className="mr-2 h-3 w-3" />
                 Gerar Card
               </>
             )}
@@ -626,14 +618,17 @@ export function DesignerExport() {
       </Card>
 
       {/* Preview Card - Layout fixo para TikTok */}
-      <div className="lg:sticky lg:top-4 lg:self-start">
+      <div className="lg:self-start">
         <Card className="shadow-sm flex flex-col">
           <CardHeader className="pb-2">
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle className="text-lg">Preview TikTok</CardTitle>
+                <CardTitle className="text-lg">Visualização TikTok (9:16)</CardTitle>
                 <CardDescription className="text-xs">Visualize seu card no formato TikTok</CardDescription>
               </div>
+              <Button variant="ghost" size="sm" onClick={toggleCompactMode} className="h-8 w-8 p-0">
+                {compactMode ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+              </Button>
             </div>
           </CardHeader>
           <CardContent className="p-0 flex-grow overflow-hidden">
@@ -642,8 +637,8 @@ export function DesignerExport() {
                 <TabsTrigger value="preview" className="text-sm">
                   Preview
                 </TabsTrigger>
-                <TabsTrigger value="video" className="text-sm">
-                  Vídeo
+                <TabsTrigger value="card" className="text-sm">
+                  Card
                 </TabsTrigger>
               </TabsList>
 
@@ -655,83 +650,67 @@ export function DesignerExport() {
                       className="tiktok-preview-container bg-black relative overflow-hidden"
                       style={{
                         width: "100%",
-                        maxWidth: "375px",
-                        height: "667px",
+                        maxWidth: "180px", // Reduzido de 200px para 180px
+                        height: "320px", // Reduzido de 356px para 320px
                         margin: "0 auto",
                       }}
                     >
                       {/* TikTok UI Header */}
-                      <div className="w-full bg-black text-white p-2 flex justify-between items-center">
+                      <div className="w-full bg-black text-white p-1 flex justify-between items-center">
                         <div className="flex items-center">
-                          <span className="text-sm font-medium">TikTok Preview</span>
+                          <span className="text-xs font-medium">TikTok</span>
                         </div>
-                        <div className="flex items-center space-x-4">
-                          <span className="text-sm">@autoseller</span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs">@autoseller</span>
                         </div>
                       </div>
 
-                      {/* TikTok Video Container - Proporção exata 9:16 */}
-                      <div className="relative w-full" style={{ height: "calc(100% - 80px)" }}>
+                      {/* TikTok Card Container - Proporção exata 9:16 */}
+                      <div className="relative w-full" style={{ height: "calc(100% - 30px)" }}>
                         <div className="w-full h-full overflow-hidden relative">
                           {previewUrl && !isPreviewLoading && !previewError && (
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="absolute top-2 right-2 z-10"
+                              className="absolute top-1 right-1 z-10 h-6 w-6 p-0"
                               onClick={reloadPreview}
                               aria-label="Recarregar preview"
                             >
-                              <RefreshCw className="h-4 w-4" />
+                              <RefreshCw className="h-3 w-3" />
                             </Button>
                           )}
                           {isPreviewLoading ? (
                             <div className="flex items-center justify-center h-full bg-muted">
-                              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                              <p className="ml-2 text-sm">Carregando preview...</p>
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                              <p className="ml-2 text-xs">Carregando...</p>
                             </div>
                           ) : previewError ? (
                             <div className="flex flex-col items-center justify-center h-full bg-muted">
-                              <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
-                              <p className="text-muted-foreground text-center text-sm">
-                                Não foi possível renderizar o preview. <br />
-                                Tente gerar o card novamente.
-                              </p>
-                              <Button variant="outline" size="sm" className="mt-4" onClick={handleGenerate}>
+                              <AlertCircle className="h-4 w-4 text-red-500 mb-2" />
+                              <p className="text-muted-foreground text-center text-xs">Erro ao renderizar</p>
+                              <Button variant="outline" size="sm" className="mt-2 text-xs h-6" onClick={handleGenerate}>
                                 Tentar novamente
                               </Button>
                             </div>
                           ) : (
                             <div
                               ref={previewContainerRef}
-                              className="w-full h-full overflow-hidden bg-white" // Adicionado bg-white para garantir visibilidade
-                              style={{ minHeight: "400px" }} // Garantir altura mínima
+                              className="w-full h-full overflow-hidden bg-white"
+                              style={{ minHeight: "200px" }}
                             />
                           )}
-                        </div>
-                      </div>
-
-                      {/* TikTok Bottom Bar */}
-                      <div className="w-full bg-black text-white p-2 flex justify-around items-center">
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs">Para você</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs">Seguindo</span>
-                        </div>
-                        <div className="flex flex-col items-center">
-                          <span className="text-xs">Pesquisar</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Botões de ação para o preview */}
                     {previewUrl && (
-                      <div className="flex justify-center gap-2 mt-4">
-                        <Button size="sm" variant="outline" onClick={openPreviewInNewWindow} className="text-xs">
+                      <div className="flex justify-center gap-2 mt-2">
+                        <Button size="sm" variant="outline" onClick={openPreviewInNewWindow} className="text-xs h-7">
                           <ExternalLink className="h-3 w-3 mr-1" />
-                          Abrir em Nova Janela
+                          Abrir
                         </Button>
-                        <Button size="sm" variant="outline" onClick={copyPreviewLink} className="text-xs">
+                        <Button size="sm" variant="outline" onClick={copyPreviewLink} className="text-xs h-7">
                           <Copy className="h-3 w-3 mr-1" />
                           Copiar Link
                         </Button>
@@ -739,107 +718,94 @@ export function DesignerExport() {
                     )}
                   </div>
                 ) : (
-                  <div className="text-center text-muted-foreground py-12">
-                    <Video className="mx-auto h-12 w-12 mb-2" />
+                  <div className="text-center text-muted-foreground py-6">
+                    <ImageIcon className="mx-auto h-8 w-8 mb-2" />
                     <p className="text-sm">Gere um card para visualizá-lo aqui</p>
                   </div>
                 )}
               </TabsContent>
 
-              <TabsContent value="video" className="p-4">
+              <TabsContent value="card" className="p-4">
                 <div className="flex flex-col gap-4">
-                  {videoGenerated ? (
+                  {cardGenerated && cardUrl ? (
                     <div className="space-y-4">
                       <div
                         className="bg-black rounded-lg overflow-hidden"
-                        style={{ maxWidth: "375px", margin: "0 auto" }}
+                        style={{
+                          maxWidth: "180px", // Reduzido de 200px para 180px
+                          margin: "0 auto",
+                        }}
                       >
-                        {/* Exibir o preview do card como vídeo */}
-                        <div className="w-full aspect-[9/16] relative">
-                          {/* Usar um container para o vídeo */}
-                          <div ref={videoContainerRef} className="absolute inset-0 bg-white"></div>
+                        {/* Exibir o card gerado */}
+                        <div className="w-full aspect-[9/16] relative" style={{ maxHeight: "320px" }}>
+                          <img
+                            src={cardUrl || "/placeholder.svg"}
+                            alt="Card gerado"
+                            className="w-full h-full object-contain"
+                          />
                         </div>
                       </div>
-                      <div className="flex justify-center gap-2 mt-2">
-                        <Button size="sm" variant="outline" onClick={openPreviewInNewWindow} className="text-xs">
-                          <ExternalLink className="h-3 w-3 mr-1" />
-                          Abrir em Nova Janela
-                        </Button>
-                        <Button size="sm" variant="outline" onClick={copyPreviewLink} className="text-xs">
-                          <Copy className="h-3 w-3 mr-1" />
-                          Copiar Link
-                        </Button>
-                      </div>
-                      <Alert className="bg-green-50 border-green-200">
-                        <AlertCircle className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-xs text-green-800">
-                          Vídeo gerado com sucesso! O produto foi removido da lista de produtos disponíveis e o vídeo
-                          foi salvo para publicação.
-                        </AlertDescription>
-                      </Alert>
-                      {videoData && (
-                        <div className="text-xs space-y-1 bg-gray-50 p-2 rounded-md">
-                          <p>
-                            <strong>Produto:</strong> {videoData.productName}
-                          </p>
-                          <p>
-                            <strong>Duração:</strong> {videoData.duration} segundos
-                          </p>
-                          <p>
-                            <strong>Criado em:</strong>{" "}
-                            {new Date(videoData.createdAt).toLocaleString("pt-BR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-lg">Gravação de Vídeo</CardTitle>
-                        <CardDescription className="text-xs">
-                          Grave um vídeo do card para publicação no TikTok
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <div className="space-y-3">
-                          <p className="text-sm">
-                            Ao clicar em "Gravar Vídeo", o sistema irá capturar o card por {recordingDuration} segundos
-                            e salvar o vídeo para publicação posterior.
-                          </p>
 
-                          <Alert>
-                            <AlertDescription className="text-xs">
-                              Certifique-se de que o card está gerado e visível na aba Preview antes de gravar o vídeo.
-                            </AlertDescription>
-                          </Alert>
+                      {/* Post Description Section */}
+                      <div className="mt-2 border rounded-md p-2">
+                        <div className="flex justify-between items-center mb-1">
+                          <h3 className="text-xs font-medium">Descrição para Post</h3>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsEditingDescription(!isEditingDescription)}
+                            className="h-6 text-xs"
+                          >
+                            {isEditingDescription ? "Concluir" : "Editar"}
+                          </Button>
                         </div>
-                      </CardContent>
-                      <CardFooter className="pt-0">
-                        <Button
-                          onClick={handleRecordVideo}
-                          disabled={!htmlTemplate || isRecording}
-                          className="w-full h-9 text-sm"
-                        >
-                          {isRecording ? (
+
+                        {isEditingDescription ? (
+                          <Textarea
+                            value={postDescription}
+                            onChange={(e) => setPostDescription(e.target.value)}
+                            className="min-h-[80px] max-h-[100px] text-xs"
+                            placeholder="Descrição para o post no TikTok"
+                          />
+                        ) : (
+                          <div className="bg-muted p-2 rounded-md text-xs whitespace-pre-line max-h-[80px] overflow-y-auto">
+                            {postDescription || "Nenhuma descrição gerada ainda."}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-center gap-2 mt-1">
+                        <Button size="sm" onClick={handleDownloadCard} className="text-xs h-7" disabled={isDownloading}>
+                          {isDownloading ? (
                             <>
-                              <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                              Gravando ({recordingDuration}s)...
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                              Baixando...
                             </>
                           ) : (
                             <>
-                              <Video className="mr-2 h-3 w-3" />
-                              Gravar Vídeo
+                              <Download className="h-3 w-3 mr-1" />
+                              Baixar Tudo
                             </>
                           )}
                         </Button>
-                      </CardFooter>
-                    </Card>
+                        <Button size="sm" variant="outline" onClick={handleDownloadDescription} className="text-xs h-7">
+                          <FileText className="h-3 w-3 mr-1" />
+                          Só Descrição
+                        </Button>
+                      </div>
+
+                      <Alert className="bg-green-50 border-green-200 py-1">
+                        <AlertCircle className="h-3 w-3 text-green-600" />
+                        <AlertDescription className="text-xs text-green-800">
+                          Card gerado com sucesso! Baixe o card e a descrição para publicação.
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  ) : (
+                    <div className="text-center text-muted-foreground py-6">
+                      <ImageIcon className="mx-auto h-8 w-8 mb-2" />
+                      <p className="text-sm">Gere um card para visualizá-lo aqui</p>
+                    </div>
                   )}
                 </div>
               </TabsContent>
@@ -847,7 +813,6 @@ export function DesignerExport() {
           </CardContent>
         </Card>
       </div>
-      <VideoGeneratorPro products={products} />
     </div>
   )
 }

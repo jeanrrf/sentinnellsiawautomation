@@ -4,8 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
-import { CheckCircle2, XCircle, AlertTriangle, RefreshCw } from "lucide-react"
+import { RefreshCw, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
 
 export function SystemStatusChecker() {
   const [status, setStatus] = useState<"loading" | "operational" | "warning" | "error">("loading")
@@ -15,7 +14,7 @@ export function SystemStatusChecker() {
   const checkSystemStatus = async () => {
     setIsChecking(true)
     try {
-      const response = await fetch("/api/video-system-check")
+      const response = await fetch("/api/system-check")
       const data = await response.json()
 
       if (data.success) {
@@ -74,7 +73,7 @@ export function SystemStatusChecker() {
           {currentStatus.icon}
           Status do Sistema
         </CardTitle>
-        <CardDescription>Verificação dos componentes de geração de vídeo</CardDescription>
+        <CardDescription>Verificação dos componentes do sistema</CardDescription>
       </CardHeader>
       <CardContent>
         <Alert className={`${currentStatus.color} border-0`}>
@@ -84,15 +83,6 @@ export function SystemStatusChecker() {
 
         {details && (
           <div className="mt-4 space-y-3 text-sm">
-            <div>
-              <h4 className="font-medium mb-1">Componentes:</h4>
-              <div className="flex flex-wrap gap-2">
-                <Badge variant={details.binaries?.ffmpegPath ? "default" : "destructive"}>FFmpeg</Badge>
-                <Badge variant={details.binaries?.ffprobePath ? "default" : "destructive"}>FFprobe</Badge>
-                <Badge variant={details.environment?.node ? "default" : "destructive"}>Node.js</Badge>
-              </div>
-            </div>
-
             {details.resources && (
               <div>
                 <h4 className="font-medium mb-1">Recursos:</h4>
