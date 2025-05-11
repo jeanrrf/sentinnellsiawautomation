@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { saveVideo } from "@/lib/redis"
 // Importar a função de upload do Blob Storage
-import { uploadVideo } from "@/lib/blob-storage"
+// import { uploadVideo } from "@/lib/blob-storage"
 
 // Modificar a função POST para usar o Blob Storage quando possível
 export async function POST(req: Request) {
@@ -51,25 +51,25 @@ export async function POST(req: Request) {
     const timestamp = Date.now()
 
     // Variável para armazenar a URL do vídeo no Blob Storage
-    let blobUrl = null
+    const blobUrl = null
 
     // Se temos um buffer de vídeo, fazer upload para o Blob Storage
-    if (videoBuffer) {
-      try {
-        // Converter string base64 para Buffer se necessário
-        const buffer =
-          typeof videoBuffer === "string"
-            ? Buffer.from(videoBuffer.replace(/^data:video\/\w+;base64,/, ""), "base64")
-            : videoBuffer
+    // if (videoBuffer) {
+    //   try {
+    //     // Converter string base64 para Buffer se necessário
+    //     const buffer =
+    //       typeof videoBuffer === "string"
+    //         ? Buffer.from(videoBuffer.replace(/^data:video\/\w+;base64,/, ""), "base64")
+    //         : videoBuffer
 
-        // Fazer upload para o Blob Storage
-        blobUrl = await uploadVideo(buffer, `produto_${productId}_${timestamp}.mp4`)
-        console.log(`Vídeo enviado para o Blob Storage: ${blobUrl}`)
-      } catch (error) {
-        console.error("Erro ao fazer upload do vídeo para o Blob Storage:", error)
-        // Continuar mesmo se o upload falhar
-      }
-    }
+    //     // Fazer upload para o Blob Storage
+    //     blobUrl = await uploadVideo(buffer, `produto_${productId}_${timestamp}.mp4`)
+    //     console.log(`Vídeo enviado para o Blob Storage: ${blobUrl}`)
+    //   } catch (error) {
+    //     console.error("Erro ao fazer upload do vídeo para o Blob Storage:", error)
+    //     // Continuar mesmo se o upload falhar
+    //   }
+    // }
 
     // Criar dados do vídeo
     const videoData = {
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
       duration: duration || 5,
       createdAt: new Date().toISOString(),
       status: "generated", // generated, published, failed
-      videoUrl: blobUrl || `/api/preview/${productId}?style=portrait&t=${timestamp}`, // URL do Blob ou fallback
+      videoUrl: `/api/preview/${productId}?style=portrait&t=${timestamp}`, // URL do Blob ou fallback
       blobUrl: blobUrl, // Armazenar a URL do Blob separadamente
       htmlTemplate: templateHtml, // Salvar o HTML do template para exibição posterior
     }

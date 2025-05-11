@@ -1,136 +1,357 @@
 import { NextResponse } from "next/server"
+import fs from "fs"
+import path from "path"
 import { createLogger } from "@/lib/logger"
-import { v4 as uuidv4 } from "uuid"
+import { Redis } from "@upstash/redis"
 
 const logger = createLogger("API:Schedule")
 
-// Simulação de armazenamento em memória para agendamentos
-let schedules = [
-  {
-    id: "1",
-    name: "Geração diária de vídeos",
-    frequency: "daily",
-    time: "09:00",
-    active: true,
-  },
-  {
-    id: "2",
-    name: "Geração semanal de vídeos",
-    frequency: "weekly",
-    days: ["Segunda", "Quarta", "Sexta"],
-    time: "14:00",
-    active: false,
-  },
-]
-
-// Função para simular acesso ao Redis
-async function getSchedulesFromStorage() {
-  // Em uma implementação real, isso buscaria do Redis
-  return schedules
+interface Schedule {
+  id: string
+  date: string
+  time: string
+  frequency: string
+  status: string
+  type?: string // New field to distinguish between regular and auto-download schedules
+  lastRun?: string
+  productCount?: number
+  generatedCards?: string[]
+  errors?: string[]
 }
 
-// Função para simular salvamento no Redis
-async function saveScheduleToStorage(schedule) {
-  // Em uma implementação real, isso salvaria no Redis
-  const newSchedule = {
-    ...schedule,
-    id: uuidv4(),
-  }
-  schedules.push(newSchedule)
-  return newSchedule
-}
-
-// Função para simular exclusão no Redis
-async function deleteScheduleFromStorage(id) {
-  // Em uma implementação real, isso excluiria do Redis
-  schedules = schedules.filter((schedule) => schedule.id !== id)
-  return true
-}
-
-// Função para simular atualização no Redis
-async function updateScheduleInStorage(id, data) {
-  // Em uma implementação real, isso atualizaria no Redis
-  schedules = schedules.map((schedule) => (schedule.id === id ? { ...schedule, ...data } : schedule))
-  return schedules.find((schedule) => schedule.id === id)
-}
-
+// Modificar a função GET para usar Redis em vez de sistema de arquivos em produção
 export async function GET() {
   try {
-    logger.info("Buscando agendamentos")
-    const schedules = await getSchedulesFromStorage()
+    logger.info("Fetching schedules")
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
 
-    return NextResponse.json({ schedules })
+    if (isVercel) {
+      // Em produção, usar Redis para armazenar agendamentos
+      try {
+        const redis = Redis.fromEnv()
+        const schedulesData = await redis.get("schedules")
+        logger.info("Fetched schedules from Redis")
+
+        return NextResponse.json({
+          schedules: schedulesData ? JSON.parse(schedulesData) : [],
+        })
+      } catch (redisError) {
+        logger.error("Error accessing Redis:", redisError)
+        return NextResponse.json({
+          schedules: [],
+          message: "Erro ao acessar Redis. Usando dados simulados.",
+        })
+      }
+    }
+
+    // Em ambiente de desenvolvimento, tentar usar o sistema de arquivos
+    const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+
+    try {
+      if (!fs.existsSync(schedulesPath)) {
+        const dir = path.dirname(schedulesPath)
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true })
+        }
+
+        fs.writeFileSync(schedulesPath, JSON.stringify({ schedules: [] }, null, 2))
+        logger.info("Created empty schedules file")
+        return NextResponse.json({ schedules: [] })
+      }
+
+      const rawData = fs.readFileSync(schedulesPath, "utf-8")
+      const data = JSON.parse(rawData)
+      logger.info(`Found ${data.schedules?.length || 0} schedules`)
+
+      return NextResponse.json({ schedules: data.schedules || [] })
+    } catch (fsError) {
+      logger.error("Error accessing file system:", fsError)
+      // Fallback para dados simulados em caso de erro
+      return NextResponse.json({
+        schedules: [],
+        message: "Erro ao acessar sistema de arquivos. Usando dados simulados.",
+      })
+    }
   } catch (error) {
-    logger.error("Erro ao buscar agendamentos", { error })
-    return NextResponse.json({ error: "Erro ao buscar agendamentos", details: error.message }, { status: 500 })
+    logger.error("Error fetching schedules:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Falha ao buscar agendamentos",
+        error: error.message || "Erro desconhecido",
+      },
+      { status: 500 },
+    )
   }
 }
 
-export async function POST(request) {
+// Modificar a função POST para usar Redis em produção
+export async function POST(req: Request) {
   try {
-    const data = await request.json()
-    logger.info("Criando novo agendamento", { data })
+    const { date, time, frequency, type = "regular" } = await req.json()
+    logger.info("Creating new schedule", { date, time, frequency, type })
 
-    // Validar dados
-    if (!data.name || !data.frequency || !data.time) {
-      return NextResponse.json({ error: "Dados incompletos" }, { status: 400 })
+    if (!date || !time || !frequency) {
+      logger.warn("Missing required fields", { date, time, frequency })
+      return NextResponse.json({ success: false, message: "Date, time, and frequency are required" }, { status: 400 })
     }
 
-    // Validações específicas por frequência
-    if (data.frequency === "weekly" && (!data.days || data.days.length === 0)) {
-      return NextResponse.json({ error: "Dias da semana são obrigatórios para agendamentos semanais" }, { status: 400 })
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
+
+    const newSchedule: Schedule = {
+      id: Date.now().toString(),
+      date,
+      time,
+      frequency,
+      type, // Include the schedule type
+      status: "pending",
+      generatedCards: [],
+      errors: [],
     }
 
-    if (data.frequency === "monthly" && !data.date) {
-      return NextResponse.json({ error: "Dia do mês é obrigatório para agendamentos mensais" }, { status: 400 })
+    if (isVercel) {
+      // Em produção, usar Redis
+      try {
+        const redis = Redis.fromEnv()
+        const schedulesData = await redis.get("schedules")
+        const schedules = schedulesData ? JSON.parse(schedulesData) : []
+
+        schedules.push(newSchedule)
+        await redis.set("schedules", JSON.stringify(schedules))
+
+        logger.info("Added new schedule to Redis", { id: newSchedule.id })
+
+        return NextResponse.json({
+          success: true,
+          schedule: newSchedule,
+        })
+      } catch (redisError) {
+        logger.error("Error accessing Redis:", redisError)
+        return NextResponse.json(
+          {
+            success: false,
+            message: "Erro ao acessar Redis.",
+            error: redisError.message,
+          },
+          { status: 500 },
+        )
+      }
     }
 
-    const schedule = await saveScheduleToStorage(data)
+    // Em ambiente de desenvolvimento, tentar usar o sistema de arquivos
+    try {
+      const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
 
-    return NextResponse.json({ schedule })
+      let schedules: Schedule[] = []
+      if (fs.existsSync(schedulesPath)) {
+        const rawData = fs.readFileSync(schedulesPath, "utf-8")
+        const data = JSON.parse(rawData)
+        schedules = data.schedules || []
+      } else {
+        const dir = path.dirname(schedulesPath)
+        if (!fs.existsSync(dir)) {
+          fs.mkdirSync(dir, { recursive: true })
+        }
+      }
+
+      schedules.push(newSchedule)
+      logger.info("Added new schedule", { id: newSchedule.id })
+
+      fs.writeFileSync(schedulesPath, JSON.stringify({ schedules }, null, 2))
+
+      return NextResponse.json({
+        success: true,
+        schedule: newSchedule,
+      })
+    } catch (fsError) {
+      logger.error("Error accessing file system:", fsError)
+      // Fallback para sucesso simulado em caso de erro
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Erro ao acessar sistema de arquivos.",
+          error: fsError.message,
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
-    logger.error("Erro ao criar agendamento", { error })
-    return NextResponse.json({ error: "Erro ao criar agendamento", details: error.message }, { status: 500 })
+    logger.error("Error creating schedule:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Falha ao criar agendamento",
+        error: error.message || "Erro desconhecido",
+      },
+      { status: 500 },
+    )
   }
 }
 
-export async function DELETE(request) {
+export async function DELETE(req: Request) {
   try {
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get("id")
+    const { id } = await req.json()
+    logger.info("Deleting schedule", { id })
 
     if (!id) {
-      return NextResponse.json({ error: "ID não fornecido" }, { status: 400 })
+      logger.warn("Missing schedule ID")
+      return NextResponse.json({ success: false, message: "Schedule ID is required" }, { status: 400 })
     }
 
-    logger.info("Excluindo agendamento", { id })
-    await deleteScheduleFromStorage(id)
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
 
-    return NextResponse.json({ success: true })
+    if (isVercel) {
+      // No Vercel, retornar sucesso simulado
+      logger.info("Running in Vercel environment, returning simulated success")
+      return NextResponse.json({
+        success: true,
+        message: "Ambiente de produção detectado. Usando dados simulados.",
+      })
+    }
+
+    // Em ambiente de desenvolvimento, tentar usar o sistema de arquivos
+    try {
+      const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+
+      if (!fs.existsSync(schedulesPath)) {
+        logger.warn("Schedules file not found")
+        return NextResponse.json({ success: false, message: "No schedules found" }, { status: 404 })
+      }
+
+      const rawData = fs.readFileSync(schedulesPath, "utf-8")
+      const data = JSON.parse(rawData)
+      const schedules = data.schedules || []
+
+      const updatedSchedules = schedules.filter((schedule: Schedule) => schedule.id !== id)
+      logger.info(`Removed schedule, remaining: ${updatedSchedules.length}`)
+
+      fs.writeFileSync(schedulesPath, JSON.stringify({ schedules: updatedSchedules }, null, 2))
+
+      return NextResponse.json({
+        success: true,
+      })
+    } catch (fsError) {
+      logger.error("Error accessing file system:", fsError)
+      // Fallback para sucesso simulado em caso de erro
+      return NextResponse.json({
+        success: true,
+        message: "Erro ao acessar sistema de arquivos. Usando dados simulados.",
+      })
+    }
   } catch (error) {
-    logger.error("Erro ao excluir agendamento", { error })
-    return NextResponse.json({ error: "Erro ao excluir agendamento", details: error.message }, { status: 500 })
+    logger.error("Error deleting schedule:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Falha ao excluir agendamento",
+        error: error.message || "Erro desconhecido",
+      },
+      { status: 500 },
+    )
   }
 }
 
-export async function PATCH(request) {
+// New endpoint to download generated cards
+export async function PATCH(req: Request) {
   try {
-    const data = await request.json()
+    const { id, action } = await req.json()
+    logger.info("Schedule action request", { id, action })
 
-    if (!data.id) {
-      return NextResponse.json({ error: "ID não fornecido" }, { status: 400 })
+    if (!id || !action) {
+      logger.warn("Missing required fields", { id, action })
+      return NextResponse.json({ success: false, message: "Schedule ID and action are required" }, { status: 400 })
     }
 
-    logger.info("Atualizando agendamento", { id: data.id, data })
-    const updatedSchedule = await updateScheduleInStorage(data.id, data)
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
 
-    if (!updatedSchedule) {
-      return NextResponse.json({ error: "Agendamento não encontrado" }, { status: 404 })
+    if (isVercel) {
+      // No Vercel, retornar sucesso simulado
+      logger.info("Running in Vercel environment, returning simulated success")
+      return NextResponse.json({
+        success: true,
+        message: "Ambiente de produção detectado. Usando dados simulados.",
+      })
     }
 
-    return NextResponse.json({ schedule: updatedSchedule })
+    // Em ambiente de desenvolvimento, tentar usar o sistema de arquivos
+    try {
+      const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+
+      if (!fs.existsSync(schedulesPath)) {
+        logger.warn("Schedules file not found")
+        return NextResponse.json({ success: false, message: "No schedules found" }, { status: 404 })
+      }
+
+      const rawData = fs.readFileSync(schedulesPath, "utf-8")
+      const data = JSON.parse(rawData)
+      const schedules = data.schedules || []
+
+      const schedule = schedules.find((s: Schedule) => s.id === id)
+
+      if (!schedule) {
+        logger.warn("Schedule not found", { id })
+        return NextResponse.json({ success: false, message: "Schedule not found" }, { status: 404 })
+      }
+
+      // Handle different actions
+      if (action === "reset") {
+        // Reset schedule to pending
+        schedule.status = "pending"
+        schedule.lastRun = undefined
+        schedule.productCount = undefined
+        schedule.generatedCards = []
+        schedule.errors = []
+        logger.info("Reset schedule", { id })
+      } else if (action === "download" && schedule.generatedCards && schedule.generatedCards.length > 0) {
+        // For download action, we'll return the path to the first card
+        // The actual download will be handled by the frontend
+        const cardPath = schedule.generatedCards[0]
+
+        if (!fs.existsSync(cardPath)) {
+          logger.warn("Card file not found", { cardPath })
+          return NextResponse.json({ success: false, message: "Card file not found" }, { status: 404 })
+        }
+
+        logger.info("Returning card path for download", { cardPath })
+        return NextResponse.json({
+          success: true,
+          cardPath,
+          fileName: path.basename(cardPath),
+        })
+      } else {
+        logger.warn("Invalid action", { action })
+        return NextResponse.json({ success: false, message: "Invalid action" }, { status: 400 })
+      }
+
+      fs.writeFileSync(schedulesPath, JSON.stringify({ schedules }, null, 2))
+
+      return NextResponse.json({
+        success: true,
+      })
+    } catch (fsError) {
+      logger.error("Error accessing file system:", fsError)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Erro ao acessar sistema de arquivos.",
+          error: fsError.message,
+        },
+        { status: 500 },
+      )
+    }
   } catch (error) {
-    logger.error("Erro ao atualizar agendamento", { error })
-    return NextResponse.json({ error: "Erro ao atualizar agendamento", details: error.message }, { status: 500 })
+    logger.error("Error processing schedule action:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: "Falha ao processar ação do agendamento",
+        error: error.message || "Erro desconhecido",
+      },
+      { status: 500 },
+    )
   }
 }

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
-import { deleteVideo } from "@/lib/blob-storage"
 import { redis } from "@/lib/redis"
 import { CACHE_KEYS } from "@/lib/constants"
 
@@ -55,17 +54,6 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
         videoData = typeof video === "string" ? JSON.parse(video) : video
       } catch (error) {
         console.error(`Erro ao analisar dados do vídeo ${videoId}:`, error)
-      }
-    }
-
-    // Se o vídeo tem uma URL do Blob, excluir do Blob Storage
-    if (videoData && videoData.blobUrl) {
-      try {
-        await deleteVideo(videoData.blobUrl)
-        console.log(`Vídeo excluído do Blob Storage: ${videoData.blobUrl}`)
-      } catch (error) {
-        console.error(`Erro ao excluir vídeo do Blob Storage: ${videoData.blobUrl}`, error)
-        // Continuar mesmo se a exclusão do Blob falhar
       }
     }
 

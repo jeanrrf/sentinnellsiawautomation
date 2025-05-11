@@ -10,6 +10,9 @@ import type { ToastActionElement, ToastProps } from "@/components/ui/toast"
 let globalToast: ((props: ToastProps) => string) | null = null
 let globalDismiss: ((id?: string) => void) | null = null
 
+// Definir duração padrão para 3 segundos (3000ms)
+const DEFAULT_TOAST_DURATION = 3000
+
 type ToastContextType = {
   toast: (props: ToastProps) => string
   dismiss: (id?: string) => void
@@ -27,17 +30,24 @@ export function ToastProvider({ children }: ToastProviderProps) {
   const toast = React.useCallback((props: ToastProps) => {
     const id = props.id || Math.random().toString(36).substring(2, 9)
 
+    // Aplicar duração padrão se não for especificada
+    const toastWithDuration = {
+      ...props,
+      duration: props.duration || DEFAULT_TOAST_DURATION,
+      id,
+    }
+
     setToasts((prevToasts) => {
       // Verificar se já existe um toast com este ID
       const exists = prevToasts.some((toast) => toast.id === id)
 
       // Se já existe, atualizar em vez de adicionar
       if (exists) {
-        return prevToasts.map((toast) => (toast.id === id ? { ...toast, ...props, id } : toast))
+        return prevToasts.map((toast) => (toast.id === id ? toastWithDuration : toast))
       }
 
       // Caso contrário, adicionar novo toast
-      return [...prevToasts, { ...props, id }]
+      return [...prevToasts, toastWithDuration]
     })
 
     return id
@@ -50,6 +60,19 @@ export function ToastProvider({ children }: ToastProviderProps) {
       setToasts([])
     }
   }, [])
+
+  // Garante que todos os toasts sejam removidos após sua duração
+  React.useEffect(() => {
+    toasts.forEach((toast) => {
+      if (toast.id && toast.duration && !toast.important) {
+        const timer = setTimeout(() => {
+          dismiss(toast.id)
+        }, toast.duration)
+
+        return () => clearTimeout(timer)
+      }
+    })
+  }, [toasts, dismiss])
 
   // Atualizar as variáveis globais
   React.useEffect(() => {
@@ -94,7 +117,11 @@ function toastFunction(props: ToastProps): string {
     console.warn("Toast function called before ToastProvider was initialized")
     return ""
   }
-  return globalToast(props)
+  // Aplicar duração padrão se não for especificada
+  return globalToast({
+    ...props,
+    duration: props.duration || DEFAULT_TOAST_DURATION,
+  })
 }
 
 // Função dismiss simples

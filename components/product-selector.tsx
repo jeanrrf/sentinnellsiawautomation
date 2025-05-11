@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from "react"
 import { Check, ChevronsUpDown, AlertCircle, Loader2, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { createLogger, ErrorCodes } from "@/lib/logger"
@@ -48,6 +48,7 @@ export function ProductSelector({
   const [localProducts, setLocalProducts] = useState<Product[]>([])
   const [showProductNotFoundAlert, setShowProductNotFoundAlert] = useState(false)
   const [hasInitialized, setHasInitialized] = useState(false)
+  const [fetchAttempts, setFetchAttempts] = useState(0)
 
   // Unique ID for accessibility
   const selectorId = useMemo(() => `product-selector-${Math.random().toString(36).substring(2, 9)}`, [])
@@ -87,7 +88,8 @@ export function ProductSelector({
     const shouldFetchProducts =
       (hasInitialized && !Array.isArray(localProducts)) || (Array.isArray(localProducts) && localProducts.length === 0)
 
-    if (shouldFetchProducts && !isLoading) {
+    // Limitar a 3 tentativas para evitar loops infinitos
+    if (shouldFetchProducts && !isLoading && fetchAttempts < 3) {
       logger.info("No local products available, fetching from API")
 
       const fetchProducts = async () => {
@@ -106,11 +108,17 @@ export function ProductSelector({
               context: { count: data.products.length },
             })
             setLocalProducts(data.products)
+
+            // Se não houver produtos, não tente novamente
+            if (data.products.length === 0) {
+              setFetchAttempts(3) // Impedir novas tentativas
+            }
           } else {
             logger.warning("API returned invalid products data", {
               code: ErrorCodes.API.RESPONSE_INVALID,
             })
             setLocalProducts([])
+            setFetchAttempts(fetchAttempts + 1)
           }
         } catch (error) {
           logger.error("Error fetching products", {
@@ -118,6 +126,7 @@ export function ProductSelector({
             details: error,
           })
           setLocalProducts([])
+          setFetchAttempts(fetchAttempts + 1)
         } finally {
           setIsLoading(false)
         }
@@ -125,7 +134,7 @@ export function ProductSelector({
 
       fetchProducts()
     }
-  }, [localProducts, isLoading, hasInitialized])
+  }, [localProducts, isLoading, hasInitialized, fetchAttempts])
 
   // Filter products based on search term
   const filteredProducts = useMemo(() => {
@@ -165,6 +174,12 @@ export function ProductSelector({
     onChange(newValue)
     setOpen(false)
     setShowProductNotFoundAlert(false)
+  }
+
+  // Função para forçar uma nova busca
+  const handleRefresh = () => {
+    setFetchAttempts(0)
+    setLocalProducts([])
   }
 
   return (
@@ -253,15 +268,22 @@ export function ProductSelector({
                   ))}
                 </div>
               ) : filteredProducts.length === 0 ? (
-                <CommandEmpty className="py-6 text-center text-sm">
+                <div className="py-6 text-center text-sm">
                   {searchTerm ? (
                     <>
                       Nenhum produto encontrado para <strong>"{searchTerm}"</strong>
                     </>
+                  ) : fetchAttempts >= 3 ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <p>Não foi possível carregar produtos.</p>
+                      <Button size="sm" variant="outline" onClick={handleRefresh}>
+                        Tentar novamente
+                      </Button>
+                    </div>
                   ) : (
                     "Nenhum produto disponível"
                   )}
-                </CommandEmpty>
+                </div>
               ) : (
                 <CommandGroup heading="Produtos">
                   {filteredProducts.map((product) => (

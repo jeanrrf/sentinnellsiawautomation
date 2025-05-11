@@ -1,126 +1,51 @@
+import { createLogger } from "./logger"
+
+const logger = createLogger("template-renderer")
+
 /**
- * Cria uma descrição de fallback para um produto
+ * Creates a fallback description for a product
  */
 export function createFallbackDescription(product: any) {
   const price = Number.parseFloat(product.price)
   const stars = Number.parseFloat(product.ratingStar || "4.5")
   const sales = Number.parseInt(product.sales)
 
-  // Criar uma descrição curta e direta
-  const urgency = sales > 1000 ? "🔥 OFERTA IMPERDÍVEL!" : "⚡ PROMOÇÃO!"
+  // Create a short and direct description
+  const urgency = sales > 1000 ? "🔥 UNMISSABLE OFFER!" : "⚡ PROMOTION!"
   const rating = "⭐".repeat(Math.min(Math.round(stars), 5))
 
-  // Limitar o nome do produto a 30 caracteres
+  // Limit product name to 30 characters
   const shortName = product.productName.length > 30 ? product.productName.substring(0, 30) + "..." : product.productName
 
-  return `${urgency}\n${shortName}\n${rating}\nApenas R$${price.toFixed(2)}\nJá vendidos: ${sales}\n#oferta #shopee`
+  return `${urgency}\n${shortName}\n${rating}\nOnly R$${price.toFixed(2)}\nAlready sold: ${sales}\n#offer #shopee`
 }
 
 /**
- * Renderiza um template básico para produtos não encontrados
+ * Renders a product card template
  */
-export function renderBasicTemplate(product: any) {
-  return `<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Card Produto TikTok</title>
-  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: 'Bruno Ace SC', sans-serif;
-      background: #0f0f0f;
-      color: white;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100%;
-      height: auto;
-    }
-    .card {
-      width: 90%;
-      max-width: 500px;
-      background: rgba(30, 30, 30, 0.8);
-      border-radius: 15px;
-      padding: 20px;
-      text-align: center;
-    }
-    .logo {
-      font-size: 24px;
-      font-weight: bold;
-      margin-bottom: 20px;
-      background: linear-gradient(45deg, #ff007a, #b155ff);
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-    }
-    .product-image {
-      width: 100%;
-      max-height: 300px;
-      object-fit: contain;
-      margin: 15px 0;
-      border-radius: 10px;
-    }
-    .product-title {
-      font-size: 18px;
-      margin-bottom: 10px;
-    }
-    .price {
-      font-size: 24px;
-      color: #ff0055;
-      margin-bottom: 15px;
-    }
-    .buy-button {
-      display: inline-block;
-      padding: 10px 30px;
-      background: linear-gradient(45deg, #c21244, #15e4ff);
-      color: white;
-      text-decoration: none;
-      border-radius: 30px;
-      font-weight: bold;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="logo">Sales Martins</div>
-    <h1 class="product-title">${product.productName}</h1>
-    <img src="${product.imageUrl}" alt="${product.productName}" class="product-image">
-    <p class="price">R$ ${Number(product.price).toFixed(2)}</p>
-    <p>Vendas: ${product.sales}+</p>
-    <a href="${product.offerLink || "#"}" class="buy-button">COMPRAR AGORA</a>
-  </div>
-</body>
-</html>`
-}
-
 export function renderProductCardTemplate(product: any, description: string, style = "portrait") {
   if (!product) {
     console.error("Product is undefined or null in renderProductCardTemplate")
     throw new Error("Product is required to render template")
   }
 
-  console.log(`Rendering template for product: ${product.itemId} with style: ${style}`)
+  logger.info(`Rendering template for product: ${product.itemId} with style: ${style}`)
 
-  // Usar o preço original calculado ou o preço atual se não houver desconto
+  // Use calculated original price or current price if no discount
   const currentPrice = Number.parseFloat(product.price)
   const originalPrice = product.calculatedOriginalPrice ? Number.parseFloat(product.calculatedOriginalPrice) : null
 
-  // Calcular a porcentagem de desconto se tivermos o preço original
+  // Calculate discount percentage if we have the original price
   let discountPercentage = null
   if (originalPrice && originalPrice > currentPrice) {
     discountPercentage = Math.round(((originalPrice - currentPrice) / originalPrice) * 100)
   } else if (product.priceDiscountRate) {
-    // Ou usar diretamente a taxa de desconto da API
+    // Or use the discount rate directly from the API
     discountPercentage = Math.round(Number.parseFloat(product.priceDiscountRate))
   }
 
   // Extract additional product details
-  const shopName = product.shopName || "Loja Oficial"
+  const shopName = product.shopName || "Official Store"
   const ratingStar = Number.parseFloat(product.ratingStar || "4.5").toFixed(1)
   const sales = Number.parseInt(product.sales || "0")
   const commissionRate = product.commissionRate ? Number.parseFloat(product.commissionRate).toFixed(1) + "%" : null
@@ -129,12 +54,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
   // Format the description with emojis and line breaks
   const formattedDescription = description.replace(/\n/g, "<br>")
 
-  // Selecionar o template com base no estilo
-  if (style === "ageminipara") {
-    return renderAgeminiParaTemplate(product, description)
-  }
-
-  // Adicionar prefixo a todas as classes CSS para evitar conflitos
+  // Add prefix to all CSS classes to avoid conflicts
   const renderedTemplate = `<!DOCTYPE html>
 <html lang="pt-BR">
 
@@ -146,7 +66,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    /* Reset e configurações básicas */
+    /* Reset and basic settings */
     * {
       box-sizing: border-box;
       margin: 0;
@@ -158,7 +78,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: auto;
+      overflow: hidden;
     }
 
     body {
@@ -179,11 +99,10 @@ export function renderProductCardTemplate(product: any, description: string, sty
 
     .sm-card-container {
       width: 100%;
-      height: auto;
-      min-height: 100%;
+      height: 100%;
       aspect-ratio: 9/16;
       background: #000;
-      overflow: auto;
+      overflow: hidden;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -191,7 +110,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       justify-content: flex-start;
     }
 
-    /* Background animado */
+    /* Animated background */
     .sm-background {
       position: absolute;
       top: 0;
@@ -260,12 +179,11 @@ export function renderProductCardTemplate(product: any, description: string, sty
       color: #ff007a;
     }
 
-    /* Card principal */
+    /* Main card */
     .sm-card {
       position: relative;
       width: 100%;
-      height: auto;
-      min-height: 100%;
+      height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -275,11 +193,10 @@ export function renderProductCardTemplate(product: any, description: string, sty
       backdrop-filter: blur(10px);
     }
 
-    /* Imagem do produto */
+    /* Product image */
     .sm-product-image-container {
       width: 100%;
-      height: auto;
-      max-height: 45%;
+      height: 45%;
       margin: 10px 0;
       display: flex;
       justify-content: center;
@@ -291,8 +208,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
 
     .sm-product-image {
       width: 100%;
-      height: auto;
-      max-height: 100%;
+      height: 100%;
       object-fit: contain;
       border-radius: 15px;
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
@@ -313,7 +229,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       z-index: 2;
     }
 
-    /* Título do produto */
+    /* Product title */
     .sm-product-title {
       font-size: 1.4rem;
       line-height: 1.2;
@@ -329,7 +245,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       text-overflow: ellipsis;
     }
 
-    /* Preço */
+    /* Price */
     .sm-price-container {
       display: flex;
       align-items: center;
@@ -362,7 +278,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
 
-    /* Descrição */
+    /* Description */
     .sm-product-description {
       font-size: 1rem;
       color: #cccccc;
@@ -374,7 +290,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       padding: 0 10px;
     }
 
-    /* Informações adicionais */
+    /* Additional information */
     .sm-product-info {
       font-size: 0.9rem;
       margin: 5px 0;
@@ -395,7 +311,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       color: #ffd700;
     }
 
-    /* Botão de compra */
+    /* Buy button */
     .sm-buy-button {
       display: inline-block;
       margin-top: 10px;
@@ -415,7 +331,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
     }
 
-    /* Badges de destaque */
+    /* Highlight badges */
     .sm-highlight-badges {
       display: flex;
       flex-wrap: wrap;
@@ -458,57 +374,55 @@ export function renderProductCardTemplate(product: any, description: string, sty
       <span class="sm-shop-badge-icon">🏪</span>
       <span>${shopName}</span>
     </div>
-    
+
     <div class="sm-card">
       <h1 class="sm-product-title">${product.productName}</h1>
-      
+
       <div class="sm-product-image-container">
-        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image" />
+        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image">
         ${discountPercentage ? `<div class="sm-discount-badge-corner">-${discountPercentage}%</div>` : ""}
       </div>
-      
-      <div class="sm-highlight-badges">
-        ${sales > 1000 ? `<div class="sm-highlight-badge sm-badge-bestseller">🔥 Mais Vendido</div>` : ""}
-        ${discountPercentage > 20 ? `<div class="sm-highlight-badge sm-badge-hot">💰 Super Oferta</div>` : ""}
-        ${sales > 500 && discountPercentage > 10 ? `<div class="sm-highlight-badge sm-badge-limited">⏱️ Oferta Limitada</div>` : ""}
-      </div>
-      
+
       <div class="sm-price-container">
-        <p class="sm-current-price">R$ ${currentPrice.toFixed(2)}</p>
-        ${originalPrice ? `<p class="sm-original-price">R$ ${originalPrice.toFixed(2)}</p>` : ""}
-        ${discountPercentage ? `<span class="sm-discount-badge">-${discountPercentage}%</span>` : ""}
+        <span class="sm-current-price">R$ ${currentPrice.toFixed(2)}</span>
+        ${originalPrice ? `<span class="sm-original-price">R$ ${originalPrice.toFixed(2)}</span>` : ""}
       </div>
-      
-      <p class="sm-product-description">${formattedDescription}</p>
-      
+
       <div class="sm-product-info">
         <div class="sm-info-item">
-          <span class="sm-star-rating">★</span> ${ratingStar}
+          <span class="sm-star-rating">⭐</span>
+          <span>${ratingStar}</span>
         </div>
         <div class="sm-info-item">
-          <span>👥</span> ${sales.toLocaleString("pt-BR")}+ vendidos
+          <span>🛒</span>
+          <span>${sales}+ vendas</span>
         </div>
         ${
           commissionRate
             ? `
         <div class="sm-info-item">
-          <span>💎</span> ${commissionRate} cashback
+          <span>💰</span>
+          <span>${commissionRate} comissão</span>
         </div>
         `
             : ""
         }
       </div>
-      
-      <a href="${offerLink}" target="_blank" class="sm-buy-button">COMPRAR AGORA</a>
+
+      <div class="sm-highlight-badges">
+        ${sales > 1000 ? `<div class="sm-highlight-badge sm-badge-bestseller">🔥 Mais Vendido</div>` : ""}
+        ${discountPercentage && discountPercentage > 20 ? `<div class="sm-highlight-badge sm-badge-hot">💯 Super Oferta</div>` : ""}
+        <div class="sm-highlight-badge sm-badge-limited">⏱️ Tempo Limitado</div>
+      </div>
+
+      <div class="sm-product-description">${formattedDescription}</div>
+
+      <a href="${offerLink}" class="sm-buy-button">COMPRAR AGORA</a>
     </div>
   </div>
 </body>
-</html>`
 
-  if (!renderedTemplate || renderedTemplate.trim() === "") {
-    console.error("Template renderizado está vazio")
-    throw new Error("O template renderizado está vazio. Verifique os dados fornecidos.")
-  }
+</html>`
 
   return renderedTemplate
 }
@@ -559,7 +473,7 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: auto;
+      overflow: hidden;
     }
     
     body {
@@ -571,11 +485,10 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     
     .ap-container {
       width: 100%;
-      height: auto;
-      min-height: 100%;
+      height: 100%;
       aspect-ratio: 9/16;
       position: relative;
-      overflow: auto;
+      overflow: hidden;
       background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
     
@@ -613,8 +526,7 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     .ap-content {
       position: relative;
       width: 100%;
-      height: auto;
-      min-height: 100%;
+      height: 100%;
       display: flex;
       flex-direction: column;
       padding: 70px 20px 20px;
@@ -622,8 +534,7 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     
     .ap-product-image {
       width: 100%;
-      height: auto;
-      max-height: 40%;
+      height: 40%;
       object-fit: contain;
       border-radius: 10px;
       box-shadow: 0 5px 15px rgba(0,0,0,0.1);

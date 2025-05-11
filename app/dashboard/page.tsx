@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { WorkflowGuide } from "@/components/workflow-guide"
 
@@ -12,12 +12,10 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Busca de Produtos</CardTitle>
-            <CardDescription>Encontre produtos populares da Shopee</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Use nossa ferramenta de busca para encontrar produtos populares da Shopee que podem ser convertidos em
-              vídeos para o TikTok.
+              Encontre produtos populares da Shopee para criar cards e vídeos.
             </p>
           </CardContent>
           <CardFooter>
@@ -29,17 +27,16 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Designer de Vídeos</CardTitle>
-            <CardDescription>Crie vídeos para TikTok</CardDescription>
+            <CardTitle>Designer de Cards</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Use nosso designer para criar vídeos profissionais para TikTok a partir dos produtos da Shopee.
+              Crie cards personalizados para TikTok a partir dos produtos da Shopee.
             </p>
           </CardContent>
           <CardFooter>
             <Link href="/dashboard/designer" className="w-full">
-              <Button className="w-full">Criar Vídeos</Button>
+              <Button className="w-full">Criar Cards</Button>
             </Link>
           </CardFooter>
         </Card>
@@ -47,12 +44,9 @@ export default function DashboardPage() {
         <Card>
           <CardHeader>
             <CardTitle>Automação</CardTitle>
-            <CardDescription>Automatize a geração de vídeos</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Configure a automação para gerar e publicar vídeos automaticamente, economizando seu tempo.
-            </p>
+            <p className="text-sm text-muted-foreground">Configure a automação para gerar cards automaticamente.</p>
           </CardContent>
           <CardFooter>
             <Link href="/dashboard/automacao" className="w-full">
@@ -65,34 +59,32 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle>Publicação</CardTitle>
-            <CardDescription>Gerencie seus vídeos gerados</CardDescription>
+            <CardTitle>Geração Rápida</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Visualize, baixe e publique os vídeos que você gerou. Acompanhe o status de publicação.
+              Gere cards com apenas um clique usando os produtos mais populares.
             </p>
           </CardContent>
           <CardFooter>
-            <Link href="/dashboard/publicacao" className="w-full">
-              <Button className="w-full">Gerenciar Vídeos</Button>
+            <Link href="/dashboard/one-click" className="w-full">
+              <Button className="w-full">Geração Rápida</Button>
             </Link>
           </CardFooter>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Status do Sistema</CardTitle>
-            <CardDescription>Verifique o status do sistema</CardDescription>
+            <CardTitle>Configurações</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Verifique o status do sistema, incluindo conexão com a API da Shopee, geração de vídeos e mais.
+              Ajuste as configurações do sistema e personalize sua experiência.
             </p>
           </CardContent>
           <CardFooter>
-            <Link href="/dashboard/status" className="w-full">
-              <Button className="w-full">Verificar Status</Button>
+            <Link href="/dashboard/configuracoes" className="w-full">
+              <Button className="w-full">Configurações</Button>
             </Link>
           </CardFooter>
         </Card>

@@ -7,7 +7,6 @@ import { createLogger } from "../lib/logger"
 import { renderProductCardTemplate } from "../lib/template-renderer"
 import { createFallbackDescription } from "../lib/template-renderer"
 import { html2image } from "../lib/html-to-image"
-import { TrendingProductsService } from "../lib/trending-products-service"
 
 const execAsync = promisify(exec)
 const logger = createLogger("Scheduler")
@@ -34,27 +33,15 @@ interface ProductData {
   ratingStar?: string
 }
 
-// Modificar a função para usar o novo serviço de produtos em alta
 async function fetchProducts(): Promise<ProductData[]> {
   try {
-    logger.info("Buscando produtos para processamento...")
-
-    // Para automações, sempre buscar produtos em alta diretamente da API
-    const trendingProduct = await TrendingProductsService.getTrendingProduct()
-
-    if (trendingProduct) {
-      logger.info(`Produto em alta encontrado: ${trendingProduct.itemId} - ${trendingProduct.productName}`)
-      return [trendingProduct]
-    }
-
-    // Fallback para o método antigo se o serviço de produtos em alta falhar
-    logger.warning("Serviço de produtos em alta falhou, usando método de fallback")
+    logger.info("Fetching products from API...")
 
     // First try to fetch from Shopee API
     const shopeeResponse = await fetch("http://localhost:3000/api/fetch-shopee", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword: "trending", limit: 5, forceRefresh: true }), // Forçar atualização
+      body: JSON.stringify({ keyword: "trending", limit: 5 }),
     })
 
     if (shopeeResponse.ok) {
@@ -62,6 +49,18 @@ async function fetchProducts(): Promise<ProductData[]> {
       if (shopeeData.success && shopeeData.products && shopeeData.products.length > 0) {
         logger.info(`Successfully fetched ${shopeeData.products.length} products from Shopee API`)
         return shopeeData.products
+      }
+    }
+
+    // Fallback to cached products
+    logger.info("Falling back to cached products...")
+    const cachedResponse = await fetch("http://localhost:3000/api/products")
+
+    if (cachedResponse.ok) {
+      const cachedData = await cachedResponse.json()
+      if (cachedData.success && cachedData.products && cachedData.products.length > 0) {
+        logger.info(`Successfully fetched ${cachedData.products.length} products from cache`)
+        return cachedData.products
       }
     }
 
@@ -150,7 +149,7 @@ async function processAutoDownloadSchedule(schedule: Schedule): Promise<void> {
   try {
     logger.info(`Processing auto-download schedule: ${schedule.id}`)
 
-    // Buscar produtos em alta
+    // Fetch products
     const products = await fetchProducts()
 
     if (products.length === 0) {
@@ -160,8 +159,9 @@ async function processAutoDownloadSchedule(schedule: Schedule): Promise<void> {
     schedule.productCount = products.length
     logger.info(`Processing ${products.length} products for auto-download schedule ${schedule.id}`)
 
-    // Selecionar o primeiro produto (que já é um produto em alta)
-    const product = products[0]
+    // Select a random product
+    const randomIndex = Math.floor(Math.random() * products.length)
+    const product = products[randomIndex]
 
     // Generate cards with different templates
     const modernResult = await generateProductCard(product, "portrait")

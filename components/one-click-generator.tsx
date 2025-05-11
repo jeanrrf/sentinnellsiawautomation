@@ -1,14 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
-import { Download, RefreshCw, AlertTriangle, CheckCircle, Info } from "lucide-react"
+import { RefreshCw, AlertTriangle, CheckCircle, Info, Sparkles, Zap } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { Badge } from "@/components/ui/badge"
 
 export function OneClickGenerator() {
   const [isLoading, setIsLoading] = useState(false)
@@ -16,17 +15,25 @@ export function OneClickGenerator() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const [lastGeneratedProduct, setLastGeneratedProduct] = useState<string | null>(null)
   const { toast } = useToast()
-  const [productCount, setProductCount] = useState(1) // Default to 1 product
 
-  const handleOneClickGenerate = () => {
+  // Verificar se já geramos recentemente
+  useEffect(() => {
+    const lastGenerated = localStorage.getItem("lastGeneratedProductId")
+    if (lastGenerated) {
+      setLastGeneratedProduct(lastGenerated)
+    }
+  }, [])
+
+  const handleOneClickGenerate = async () => {
     setIsLoading(true)
     setProgress(0)
     setError(null)
     setSuccess(null)
-    setInfo("Iniciando busca de produtos em alta na API da Shopee...")
+    setInfo("Iniciando geração de cards...")
 
-    // Simulate progress
+    // Simular progresso
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 90) {
@@ -37,43 +44,88 @@ export function OneClickGenerator() {
       })
     }, 200)
 
-    // Open the auto-download endpoint in a new tab
-    const newTab = window.open(`/api/auto-download?count=${productCount}`, "_blank")
+    try {
+      // Verificar status do sistema primeiro
+      const systemCheck = await fetch("/api/system-check")
+      const systemStatus = await systemCheck.json()
 
-    // Check if the tab was opened successfully
-    if (!newTab) {
-      clearInterval(interval)
-      setIsLoading(false)
-      setError("O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.")
+      if (!systemStatus.redis) {
+        setInfo("Redis não está disponível. Usando dados de exemplo...")
+      }
 
-      toast({
-        variant: "destructive",
-        title: "Erro ao abrir nova aba",
-        description: "O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.",
-      })
-      return
-    }
+      // Buscar um produto aleatório diferente do último gerado
+      const productsResponse = await fetch("/api/products")
+      const productsData = await productsResponse.json()
 
-    // Complete the progress after a delay
-    setTimeout(() => {
+      if (!productsData.success || !productsData.products || productsData.products.length === 0) {
+        throw new Error("Não foi possível obter produtos da API")
+      }
+
+      // Filtrar para excluir o último produto gerado
+      let availableProducts = productsData.products
+      if (lastGeneratedProduct) {
+        availableProducts = availableProducts.filter((p) => p.itemId !== lastGeneratedProduct)
+      }
+
+      // Se não houver produtos disponíveis após o filtro, use todos
+      if (availableProducts.length === 0) {
+        availableProducts = productsData.products
+      }
+
+      // Selecionar um produto aleatório
+      const randomIndex = Math.floor(Math.random() * availableProducts.length)
+      const selectedProduct = availableProducts[randomIndex]
+
+      // Salvar o ID do produto gerado
+      localStorage.setItem("lastGeneratedProductId", selectedProduct.itemId)
+      setLastGeneratedProduct(selectedProduct.itemId)
+
+      setInfo(`Gerando cards para: ${selectedProduct.productName}`)
+
+      // Chamar a API aprimorada que gera todos os modelos de cards
+      const downloadUrl = `/api/enhanced-auto-download?productId=${selectedProduct.itemId}`
+
+      // Abrir em nova aba
+      window.open(downloadUrl, "_blank")
+
+      // Completar o progresso
       clearInterval(interval)
       setProgress(100)
       setIsLoading(false)
-      setSuccess("Geração iniciada em uma nova aba!")
-      setInfo(null)
+      setSuccess(`Cards gerados com sucesso para o produto: ${selectedProduct.productName}!`)
 
       toast({
-        title: "Geração iniciada",
-        description: "A geração e download dos cards foi iniciada em uma nova aba.",
+        title: "Geração concluída",
+        description: `Cards gerados para: ${selectedProduct.productName}`,
       })
-    }, 2000)
+    } catch (err: any) {
+      clearInterval(interval)
+      setIsLoading(false)
+      setError(`Erro: ${err.message}`)
+
+      toast({
+        variant: "destructive",
+        title: "Erro na geração",
+        description: err.message,
+      })
+    }
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
-        <CardTitle>Geração com Um Clique</CardTitle>
-        <CardDescription>Gere e baixe cards de produtos em alta automaticamente com apenas um clique</CardDescription>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <CardTitle>Geração com Um Clique</CardTitle>
+          </div>
+          {lastGeneratedProduct && (
+            <Badge variant="outline" className="text-xs">
+              Último produto: {lastGeneratedProduct}
+            </Badge>
+          )}
+        </div>
+        <CardDescription>Gere e baixe cards de produtos automaticamente com apenas um clique</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -111,26 +163,18 @@ export function OneClickGenerator() {
           </div>
         )}
 
-        <div className="mb-4">
-          <Label htmlFor="productCount">Número de Produtos:</Label>
-          <Input
-            id="productCount"
-            type="number"
-            min="1"
-            value={productCount}
-            onChange={(e) => setProductCount(Number.parseInt(e.target.value))}
-            disabled={isLoading}
-          />
-        </div>
-
         <div className="p-4 bg-blue-50 border border-blue-100 rounded-md">
-          <h3 className="font-medium text-blue-800 mb-2">O que isso faz?</h3>
+          <h3 className="font-medium text-blue-800 mb-2">Funcionalidades Aprimoradas:</h3>
           <ul className="list-disc pl-5 space-y-1 text-blue-700 text-sm">
-            <li>Conecta diretamente à API da Shopee para buscar produtos em alta</li>
-            <li>Utiliza nosso algoritmo avançado para selecionar os melhores produtos</li>
-            <li>Gera cards usando o template moderno e o template Agemini</li>
-            <li>Cria um arquivo de texto com informações do produto</li>
+            <li>
+              Seleciona automaticamente um produto <strong>diferente</strong> a cada execução
+            </li>
+            <li>
+              Gera cards em <strong>todos os modelos disponíveis</strong> (Modern, Elegant, Bold, etc.)
+            </li>
+            <li>Cria uma descrição otimizada para SEO e conversão</li>
             <li>Empacota tudo em um arquivo ZIP para download</li>
+            <li>Executa todo o processo com apenas um clique</li>
           </ul>
         </div>
       </CardContent>
@@ -144,8 +188,8 @@ export function OneClickGenerator() {
             </>
           ) : (
             <>
-              <Download className="mr-2 h-5 w-5" />
-              Gerar e Baixar Cards
+              <Zap className="mr-2 h-5 w-5" />
+              Gerar Todos os Modelos
             </>
           )}
         </Button>

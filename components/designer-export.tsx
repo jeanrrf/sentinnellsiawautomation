@@ -21,7 +21,6 @@ import {
 } from "lucide-react"
 import { ProductSelector } from "@/components/product-selector"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 
@@ -39,9 +38,7 @@ export function DesignerExport() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [generationStep, setGenerationStep] = useState<string | null>(null)
   const [generationProgress, setGenerationProgress] = useState(0)
-  const [htmlTemplate, setHtmlTemplate] = useState("")
   const [previewUrl, setPreviewUrl] = useState("")
-  const [cardUrl, setCardUrl] = useState("")
   const [cardGenerated, setCardGenerated] = useState(false)
   const [cardData, setCardData] = useState<any>(null)
 
@@ -78,32 +75,10 @@ export function DesignerExport() {
   const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
-  // Função para mostrar toast
+  // Função para mostrar toast - limitado a 4 segundos
   const showToast = (title: string, description: string, variant?: "default" | "destructive") => {
-    if (toastAvailable) {
-      try {
-        toast({
-          title,
-          description,
-          variant,
-        })
-      } catch (e) {
-        console.error("Erro ao mostrar toast:", e)
-      }
-    } else {
-      // Fallback para quando o ToastProvider não está disponível
-      setToastMessage({
-        title,
-        description,
-        variant,
-        visible: true,
-      })
-
-      // Esconder o toast após 3 segundos
-      setTimeout(() => {
-        setToastMessage(null)
-      }, 3000)
-    }
+    // Não mostrar nada
+    return
   }
 
   // Buscar produtos ao carregar o componente
@@ -120,10 +95,21 @@ export function DesignerExport() {
         }
 
         const data = await response.json()
+
+        // Verificar se os dados vêm da API Shopee
+        if (!data.success || !data.products || !Array.isArray(data.products)) {
+          throw new Error("Dados inválidos recebidos da API Shopee")
+        }
+
         setProducts(data.products || [])
       } catch (err: any) {
         setError(err.message || "Ocorreu um erro ao buscar produtos")
         console.error("Erro ao buscar produtos:", err)
+        showToast(
+          "Erro ao buscar produtos",
+          "Não foi possível obter produtos da API Shopee. Verifique sua conexão.",
+          "destructive",
+        )
       } finally {
         setIsLoading(false)
       }
@@ -143,74 +129,6 @@ export function DesignerExport() {
       }
     }
   }, [])
-
-  // Renderizar o preview de forma isolada
-  useEffect(() => {
-    console.log("Tentando renderizar preview. HTML Template existe?", !!htmlTemplate)
-
-    if (htmlTemplate && previewContainerRef.current) {
-      try {
-        console.log("Renderizando preview com template HTML")
-        // Limpar o conteúdo anterior
-        previewContainerRef.current.innerHTML = ""
-
-        // Criar um iframe isolado para o preview
-        const iframe = document.createElement("iframe")
-        iframe.style.width = "100%"
-        iframe.style.height = "100%"
-        iframe.style.border = "none"
-        iframe.style.overflow = "hidden"
-        iframe.title = "Card Preview"
-        iframe.sandbox.add("allow-same-origin")
-
-        // Adicionar ao container
-        previewContainerRef.current.appendChild(iframe)
-
-        // Escrever o conteúdo no iframe após ele ser carregado
-        iframe.onload = () => {
-          if (iframe.contentDocument) {
-            iframe.contentDocument.open()
-            iframe.contentDocument.write(htmlTemplate)
-            iframe.contentDocument.close()
-          }
-        }
-
-        // Iniciar o carregamento
-        iframe.src = "about:blank"
-
-        setTimeout(() => {
-          const iframe = previewContainerRef.current?.querySelector("iframe")
-          if (iframe && iframe.contentDocument) {
-            const content = iframe.contentDocument.body.innerHTML
-            console.log("Conteúdo do iframe:", content ? "Preenchido" : "Vazio")
-
-            if (!content || content.trim() === "") {
-              console.error("Iframe está vazio após renderização")
-              setPreviewError(true)
-              showToast(
-                "Erro de renderização",
-                "O preview não foi renderizado corretamente. Tente gerar novamente.",
-                "destructive",
-              )
-            }
-          }
-        }, 500)
-
-        setPreviewError(false)
-      } catch (error) {
-        console.error("Erro ao renderizar preview:", error)
-        console.error("Detalhes do erro:", JSON.stringify(error, null, 2))
-        setPreviewError(true)
-
-        // Mostrar toast com erro
-        showToast(
-          "Erro ao renderizar preview",
-          "Ocorreu um erro ao renderizar o preview. Verifique o console para mais detalhes.",
-          "destructive",
-        )
-      }
-    }
-  }, [htmlTemplate])
 
   // Add this new function to generate post description
   const generatePostDescription = (product) => {
@@ -272,77 +190,57 @@ ${offerLink}
       setGenerationStep("Buscando informações do produto...")
 
       // Verificar se o produto existe na lista
-      const productExists = products.some((p) => p.itemId === selectedProduct)
-      if (!productExists) {
+      const selectedProductData = products.find((p) => p.itemId === selectedProduct)
+      if (!selectedProductData) {
         throw new Error(`Produto com ID ${selectedProduct} não encontrado na lista de produtos.`)
       }
 
-      // Fazer a requisição para a API de geração de card
-      const response = await fetch("/api/generate-product-card", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          productId: selectedProduct,
-          useAI,
-          customDescription: useAI ? undefined : customDescription,
-          style: cardStyle,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Falha ao gerar card: ${response.status} ${response.statusText}`)
-      }
-
-      // Check if the response is HTML
-      const contentType = response.headers.get("Content-Type") || ""
-
-      if (contentType.includes("text/html")) {
-        // Get the HTML content
-        const htmlContent = await response.text()
-        setHtmlTemplate(htmlContent)
-
-        // Create a data URL for preview
-        const htmlBlob = new Blob([htmlContent], { type: "text/html" })
-        const imageUrl = URL.createObjectURL(htmlBlob)
-        setCardUrl(imageUrl)
-      } else {
-        // Handle as before for backward compatibility
-        const imageBlob = await response.blob()
-        const imageUrl = URL.createObjectURL(imageBlob)
-        setCardUrl(imageUrl)
-      }
-
-      // Também buscar o HTML para preview
-      const previewResponse = await fetch(`/api/preview/${selectedProduct}?style=${cardStyle}`)
-      if (previewResponse.ok) {
-        const htmlContent = await previewResponse.text()
-        setHtmlTemplate(htmlContent)
-      }
-
+      // Gerar o timestamp para evitar cache
       const timestamp = Date.now()
-      setPreviewUrl(`/api/preview/${selectedProduct}?style=${cardStyle}&t=${timestamp}`)
+
+      // Definir a URL do preview com o timestamp
+      setPreviewUrl(`/api/generate-product-card?id=${selectedProduct}&style=${cardStyle}&t=${timestamp}`)
 
       setGenerationProgress(100)
       setCardGenerated(true)
 
       // Generate post description
-      const selectedProductData = products.find((p) => p.itemId === selectedProduct)
       if (selectedProductData) {
-        const generatedDescription = generatePostDescription(selectedProductData)
-        setPostDescription(generatedDescription)
+        try {
+          // Tentar obter descrição da API
+          const descResponse = await fetch("/api/generate-description", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ product: selectedProductData }),
+          })
+
+          if (descResponse.ok) {
+            const descData = await descResponse.json()
+            if (descData.success && descData.description) {
+              setPostDescription(descData.description)
+            } else {
+              // Fallback para descrição gerada localmente
+              setPostDescription(generatePostDescription(selectedProductData))
+            }
+          } else {
+            // Fallback para descrição gerada localmente
+            setPostDescription(generatePostDescription(selectedProductData))
+          }
+        } catch (descError) {
+          console.error("Erro ao gerar descrição:", descError)
+          // Fallback para descrição gerada localmente
+          setPostDescription(generatePostDescription(selectedProductData))
+        }
       }
 
       // Mudar para a aba de preview automaticamente
       setActiveTab("preview")
-
-      showToast("Card gerado com sucesso", "Você pode visualizar e baixar o card")
     } catch (error: any) {
       console.error("Erro ao gerar card:", error)
       console.error("Stack trace:", error.stack)
       setGenerationProgress(0)
-      setHtmlTemplate("") // Limpar o template em caso de erro
       setPreviewUrl("") // Limpar a URL de preview
 
       // Mostrar mensagem de erro mais detalhada
@@ -373,20 +271,18 @@ ${offerLink}
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-
-    showToast("Descrição baixada", "A descrição do post foi baixada com sucesso")
   }
 
   // Update the handleDownloadCard function to download both files
   const handleDownloadCard = async () => {
-    if (!cardUrl) return
+    if (!previewUrl) return
 
     setIsDownloading(true)
 
     try {
       // Download the card image
       const a = document.createElement("a")
-      a.href = cardUrl
+      a.href = previewUrl
       a.download = `produto-${selectedProduct}-${Date.now()}.png`
       document.body.appendChild(a)
       a.click()
@@ -406,8 +302,6 @@ ${offerLink}
         b.click()
         document.body.removeChild(b)
       }
-
-      showToast("Download completo", "O card e a descrição foram baixados com sucesso")
     } catch (error) {
       console.error("Erro ao baixar arquivos:", error)
       showToast("Erro no download", "Ocorreu um erro ao baixar os arquivos", "destructive")
@@ -445,7 +339,7 @@ ${offerLink}
     if (height > screenHeight * 0.9) {
       const ratio = width / height
       height = Math.floor(screenHeight * 0.9)
-      width = Math.floor(height * ratio)
+      width = Math.floor(height / ratio)
     }
 
     const left = Math.floor((screenWidth - width) / 2)
@@ -464,9 +358,7 @@ ${offerLink}
 
     navigator.clipboard
       .writeText(window.location.origin + previewUrl)
-      .then(() => {
-        showToast("Link copiado", "O link do preview foi copiado para a área de transferência")
-      })
+      .then(() => {})
       .catch((err) => {
         console.error("Erro ao copiar link:", err)
         showToast("Erro ao copiar link", "Não foi possível copiar o link para a área de transferência", "destructive")
@@ -481,7 +373,8 @@ ${offerLink}
 
     // Forçar uma nova renderização do preview
     const timestamp = Date.now()
-    const newPreviewUrl = previewUrl.split("&t=")[0] + `&t=${timestamp}`
+    const baseUrl = previewUrl.split("&t=")[0]
+    const newPreviewUrl = baseUrl + `&t=${timestamp}`
     setPreviewUrl(newPreviewUrl)
 
     // Simular um pequeno atraso para a recarga
@@ -497,20 +390,6 @@ ${offerLink}
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
-      {/* Toast fallback quando o ToastProvider não está disponível */}
-      {toastMessage && toastMessage.visible && (
-        <div
-          className={`fixed top-4 left-1/2 transform -translate-x-1/2 z-50 p-4 rounded-md shadow-md ${
-            toastMessage.variant === "destructive"
-              ? "bg-red-100 border border-red-500 text-red-800"
-              : "bg-green-100 border border-green-500 text-green-800"
-          }`}
-        >
-          <div className="font-medium">{toastMessage.title}</div>
-          <div className="text-sm">{toastMessage.description}</div>
-        </div>
-      )}
-
       {/* Formulário de geração */}
       <Card className="shadow-sm">
         <CardHeader className="pb-2">
@@ -643,7 +522,7 @@ ${offerLink}
               </TabsList>
 
               <TabsContent value="preview" className="p-4 flex-grow overflow-hidden">
-                {htmlTemplate ? (
+                {previewUrl ? (
                   <div className="flex flex-col items-center justify-center h-full">
                     <div
                       ref={tiktokPreviewRef}
@@ -693,11 +572,14 @@ ${offerLink}
                               </Button>
                             </div>
                           ) : (
-                            <div
-                              ref={previewContainerRef}
-                              className="w-full h-full overflow-auto bg-white"
-                              style={{ minHeight: "200px", maxHeight: "100%" }}
-                            />
+                            <div className="w-full h-full overflow-hidden bg-white">
+                              <img
+                                src={previewUrl || "/placeholder.svg"}
+                                alt="Preview do card"
+                                className="w-full h-full object-contain"
+                                onError={() => setPreviewError(true)}
+                              />
+                            </div>
                           )}
                         </div>
                       </div>
@@ -727,7 +609,7 @@ ${offerLink}
 
               <TabsContent value="card" className="p-4">
                 <div className="flex flex-col gap-4">
-                  {cardGenerated && cardUrl ? (
+                  {cardGenerated && previewUrl ? (
                     <div className="space-y-4">
                       <div
                         className="bg-black rounded-lg overflow-hidden"
@@ -737,10 +619,11 @@ ${offerLink}
                         }}
                       >
                         {/* Exibir o card gerado */}
-                        <div className="h-full max-h-[320px] aspect-[9/16] bg-black rounded-lg overflow-auto shadow-xl">
-                          <div
-                            className="w-full h-full overflow-auto"
-                            dangerouslySetInnerHTML={{ __html: htmlTemplate }}
+                        <div className="w-full aspect-[9/16] relative" style={{ maxHeight: "320px" }}>
+                          <img
+                            src={previewUrl || "/placeholder.svg"}
+                            alt="Card gerado"
+                            className="w-full h-full object-contain"
                           />
                         </div>
                       </div>
@@ -792,13 +675,6 @@ ${offerLink}
                           Só Descrição
                         </Button>
                       </div>
-
-                      <Alert className="bg-green-50 border-green-200 py-1">
-                        <AlertCircle className="h-3 w-3 text-green-600" />
-                        <AlertDescription className="text-xs text-green-800">
-                          Card gerado com sucesso! Baixe o card e a descrição para publicação.
-                        </AlertDescription>
-                      </Alert>
                     </div>
                   ) : (
                     <div className="text-center text-muted-foreground py-6">

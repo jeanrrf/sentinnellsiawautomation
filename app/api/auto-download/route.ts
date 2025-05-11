@@ -1,44 +1,73 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createLogger } from "@/lib/logger"
-import { renderProductCardTemplate } from "@/lib/template-renderer"
-import { TrendingProductsService } from "@/lib/trending-products-service"
+import { renderProductCardTemplate, createFallbackDescription } from "@/lib/template-renderer"
+import { getCachedProducts } from "@/lib/redis"
 
 const logger = createLogger("API:AutoDownload")
 
+// Sample product data to use when Redis is unavailable
+const SAMPLE_PRODUCT = {
+  itemId: "sample123",
+  productName: "Produto Demonstração",
+  price: "99.90",
+  shopName: "Loja Exemplo",
+  sales: 1234,
+  ratingStar: 4.8,
+  offerLink: "https://example.com/product",
+  images: ["https://via.placeholder.com/500"],
+  description: "Este é um produto de demonstração usado quando não há conexão com o Redis.",
+  categories: ["Exemplo", "Demonstração"],
+  discount: 20,
+  originalPrice: "129.90",
+}
+
 export async function GET(req: NextRequest) {
   try {
-    logger.info("Auto-download request received")
+    logger.info("Enhanced auto-download request received")
 
-    // Buscar um produto em alta diretamente da API da Shopee
-    const product = await TrendingProductsService.getTrendingProduct()
+    // Try to get products from cache
+    let product
+    try {
+      const products = await getCachedProducts()
 
-    if (!product) {
-      throw new Error("Não foi possível encontrar produtos em alta. Verifique a conexão com a API da Shopee.")
+      if (products && Array.isArray(products) && products.length > 0) {
+        // Select a random product
+        const randomIndex = Math.floor(Math.random() * products.length)
+        product = products[randomIndex]
+        logger.info(`Selected random product: ${product.itemId}`)
+      } else {
+        // Use sample product if no products found
+        logger.warning("No products found in cache, using sample product")
+        product = SAMPLE_PRODUCT
+      }
+    } catch (error) {
+      // Handle Redis connection error
+      logger.error("Error connecting to Redis:", error)
+      logger.warning("Using sample product due to Redis connection error")
+      product = SAMPLE_PRODUCT
     }
 
-    logger.info(`Produto em alta encontrado: ${product.itemId} - ${product.productName}`)
-
-    // Criar descrição
+    // Create description
     const description = product.description || createFallbackDescription(product)
 
-    // Gerar cards com diferentes templates
+    // Generate cards with different templates
     const modernTemplate = renderProductCardTemplate(product, description, "portrait")
     const ageminiTemplate = renderProductCardTemplate(product, description, "ageminipara")
 
-    // Criar uma página HTML do lado do cliente que tratará o download
+    // Create a client-side HTML that will handle the download
     const clientHtml = generateClientDownloadPage(product, description, modernTemplate, ageminiTemplate)
 
-    // Retornar a página HTML
+    // Return the HTML page
     return new NextResponse(clientHtml, {
       headers: {
         "Content-Type": "text/html",
       },
     })
   } catch (error) {
-    logger.error("Erro no auto-download:", error)
+    logger.error("Error in auto-download:", error)
 
-    // Retornar uma página de erro em vez de JSON
-    const errorHtml = generateErrorPage(error.message || "Erro desconhecido ocorreu")
+    // Return an error page instead of JSON
+    const errorHtml = generateErrorPage(error.message || "Unknown error occurred")
     return new NextResponse(errorHtml, {
       headers: {
         "Content-Type": "text/html",
@@ -137,19 +166,6 @@ function generateErrorPage(errorMessage: string) {
 </html>`
 }
 
-// Function to create a fallback description
-function createFallbackDescription(product: any) {
-  return `
-${product.productName}
-
-Este produto incrível está disponível por apenas R$ ${Number(product.price).toFixed(2)}!
-
-Com mais de ${product.sales} vendas e uma avaliação de ${product.ratingStar || "N/A"} estrelas, este é um dos produtos mais populares da loja ${product.shopName || "Shopee"}.
-
-Não perca esta oportunidade! Clique no link para comprar agora.
-`.trim()
-}
-
 // Function to generate a client-side HTML page that handles the download
 function generateClientDownloadPage(
   product: any,
@@ -210,60 +226,6 @@ Link: ${product.offerLink || "N/A"}
       font-size: 24px;
       margin-bottom: 20px;
       color: #333;
-    }
-    .product-info {
-      display: flex;
-      margin-bottom: 20px;
-      padding: 15px;
-      background-color: #f0f9ff;
-      border-radius: 8px;
-      border-left: 4px solid #3b82f6;
-    }
-    .product-image {
-      width: 100px;
-      height: 100px;
-      object-fit: cover;
-      border-radius: 8px;
-      margin-right: 15px;
-    }
-    .product-details {
-      flex: 1;
-    }
-    .product-name {
-      font-size: 18px;
-      font-weight: bold;
-      margin-bottom: 5px;
-      color: #1e40af;
-    }
-    .product-meta {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 15px;
-      margin-bottom: 10px;
-    }
-    .meta-item {
-      display: flex;
-      align-items: center;
-      font-size: 14px;
-      color: #4b5563;
-    }
-    .meta-item svg {
-      margin-right: 5px;
-      color: #6b7280;
-    }
-    .trending-badge {
-      display: inline-flex;
-      align-items: center;
-      background-color: #ef4444;
-      color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-      margin-left: 10px;
-    }
-    .trending-badge svg {
-      margin-right: 4px;
     }
     .card-previews {
       display: flex;
@@ -381,53 +343,7 @@ Link: ${product.offerLink || "N/A"}
 </head>
 <body>
   <div class="container">
-    <h1>Download de Cards - Produto em Alta</h1>
-    
-    <div class="product-info">
-      <img src="${product.imageUrl || "https://via.placeholder.com/100"}" alt="${product.productName}" class="product-image">
-      <div class="product-details">
-        <div class="product-name">
-          ${product.productName}
-          <span class="trending-badge">
-            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-              <polyline points="17 6 23 6 23 12"></polyline>
-            </svg>
-            Em Alta
-          </span>
-        </div>
-        <div class="product-meta">
-          <div class="meta-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            ${product.sales} vendas
-          </div>
-          <div class="meta-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
-            </svg>
-            ${product.ratingStar} estrelas
-          </div>
-          <div class="meta-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="1" x2="12" y2="23"></line>
-              <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
-            R$ ${Number(product.price).toFixed(2)}
-            ${product.discount > 0 ? `<span style="text-decoration: line-through; margin-left: 5px; color: #888;">R$ ${Number(product.originalPrice).toFixed(2)}</span>` : ""}
-          </div>
-          <div class="meta-item">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-              <circle cx="12" cy="10" r="3"></circle>
-            </svg>
-            ${product.shopName}
-          </div>
-        </div>
-      </div>
-    </div>
+    <h1>Download de Cards - ${product.productName}</h1>
     
     <div id="statusContainer" class="status info">
       Preparando os arquivos para download...
@@ -536,12 +452,12 @@ Link: ${product.offerLink || "N/A"}
           }).catch(error => {
             console.error('Error capturing iframe:', error);
             // Fallback to a placeholder image
-            resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAYAAAB5fY51AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QIJBywfp3IOswAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAADOElEQVR42u3UMQEAAAjDMOZf9DDB5QMSUCnbTgCASYQFgLAACAsAYQEgLACEBYCwABAWAMICQFgACAuAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLgLE6MLABINHfFQAAAABJRU5ErkJggg==');
+            resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAYAAAB5fY51AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QIJBywfp3IOswAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAADOElEQVR42u3UMQEAAAjDMOZf9DDB5QMSUCnbTgCASYQFgLAACAsAYQEgLACEBYCwABAWAMICQFgACAuAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLgLE6MLABINHfFQAAAABJRU5ErkJggg==');
           });
         } catch (error) {
           console.error('Error accessing iframe content:', error);
           // Fallback to a placeholder image
-          resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAYAAAB5fY51AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QIJBywfp3IOswAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAADOElEQVR42u3UMQEAAAjDMOZf9DDB5QMSUCnbTgCASYQFgLAACAsAYQEgLACEBYCwABAWAMICQFgACAuAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLgLE6MLABINHfFQAAAABJRU5ErkJggg==');
+          resolve('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASwAAAEsCAYAAAB5fY51AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH4QIJBywfp3IOswAAAB1pVFh0Q29tbWVudAAAAAAAQ3JlYXRlZCB3aXRoIEdJTVBkLmUHAAADOElEQVR42u3UMQEAAAjDMOZf9DDB5QMSUCnbTgCASYQFgLAACAsAYQEgLACEBYCwABAWAMICQFgACAuAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLAGEBICwAhAWAsAAQFgDCAkBYAAgLgLE6MLABINHfFQAAAABJRU5ErkJggg==');
         }
       });
     }

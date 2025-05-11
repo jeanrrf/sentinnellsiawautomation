@@ -1,598 +1,391 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Loader2, Search, Filter, ArrowDownUp, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
 import { ProductList } from "@/components/product-list"
-import { Search, RefreshCw, Filter, TrendingUp, Zap } from "lucide-react"
-import { debounce } from "@/lib/utils"
-import { createLogger } from "@/lib/logger"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-  SheetFooter,
-  SheetClose,
-} from "@/components/ui/sheet"
 import { Badge } from "@/components/ui/badge"
-import { Pagination } from "@/components/ui/pagination"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-
-const logger = createLogger("AutoSearch")
-
-// Categorias populares da Shopee
-const CATEGORIES = [
-  { id: "all", name: "Todas as categorias" },
-  { id: "11", name: "Moda Feminina" },
-  { id: "4", name: "Moda Masculina" },
-  { id: "24", name: "Celulares & Acessórios" },
-  { id: "16", name: "Beleza" },
-  { id: "1", name: "Eletrônicos" },
-  { id: "13", name: "Casa & Decoração" },
-  { id: "21", name: "Esportes & Lazer" },
-  { id: "3", name: "Computadores & Acessórios" },
-  { id: "2", name: "Eletrodomésticos" },
-]
-
-// Rankings pré-definidos
-const RANKINGS = [
-  { id: "bestsellers", name: "Mais Vendidos Geral", sortBy: "sales", sortOrder: "desc", category: "all" },
-  { id: "electronics", name: "Eletrônicos Populares", sortBy: "sales", sortOrder: "desc", category: "1" },
-  { id: "fashion", name: "Moda em Alta", sortBy: "sales", sortOrder: "desc", category: "11" },
-  { id: "beauty", name: "Beleza Mais Vendidos", sortBy: "sales", sortOrder: "desc", category: "16" },
-  { id: "home", name: "Casa & Decoração Populares", sortBy: "sales", sortOrder: "desc", category: "13" },
-  { id: "tech", name: "Tecnologia em Alta", sortBy: "sales", sortOrder: "desc", category: "3" },
-  { id: "sports", name: "Esportes Populares", sortBy: "sales", sortOrder: "desc", category: "21" },
-  { id: "discounts", name: "Maiores Descontos", sortBy: "discount", sortOrder: "desc", category: "all" },
-]
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { saveLastSearchResults } from "@/lib/search-store"
 
 export function AutoSearch() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const initialRender = useRef(true)
-
-  // Estado para controlar a aba ativa
-  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "search")
-
-  // Estados para os parâmetros de busca
-  const [keyword, setKeyword] = useState(searchParams.get("keyword") || "")
-  const [category, setCategory] = useState(searchParams.get("category") || "all")
-  const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") || "")
-  const [maxPrice, setMaxPrice] = useState(searchParams.get("maxPrice") || "")
-  const [minSales, setMinSales] = useState(Number.parseInt(searchParams.get("minSales") || "0"))
-  const [sortBy, setSortBy] = useState(searchParams.get("sortBy") || "sales")
-  const [sortOrder, setSortOrder] = useState(searchParams.get("sortOrder") || "desc")
-  const [page, setPage] = useState(Number.parseInt(searchParams.get("page") || "1"))
-  const [limit, setLimit] = useState(Number.parseInt(searchParams.get("limit") || "20"))
-  const [selectedRanking, setSelectedRanking] = useState(searchParams.get("ranking") || "")
-
-  // Estados para controle da UI
+  const [products, setProducts] = useState([])
   const [isLoading, setIsLoading] = useState(false)
-  const [products, setProducts] = useState<any[]>([])
   const [error, setError] = useState("")
-  const [totalResults, setTotalResults] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
-  const [activeFilters, setActiveFilters] = useState(0)
-  const [dataSource, setDataSource] = useState<"cache" | "api" | "">("")
-  const [searchTitle, setSearchTitle] = useState("")
+  const [isFetching, setIsFetching] = useState(false)
+  const [searchParams, setSearchParams] = useState({
+    limit: "20",
+    sortType: "2",
+    category: "",
+    keyword: "",
+    minPrice: "",
+    maxPrice: "",
+    minRating: "",
+    minDiscount: "",
+  })
+  const [activeFilters, setActiveFilters] = useState<string[]>([])
 
-  // Função para atualizar a URL com os parâmetros de busca
-  const updateUrlParams = useCallback(() => {
-    const params = new URLSearchParams()
+  const fetchProducts = async () => {
+    try {
+      setIsLoading(true)
+      setError("")
 
-    params.set("tab", activeTab)
+      const response = await fetch("/api/fetch-shopee", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          limit: 20,
+          sortType: 2,
+        }),
+      })
 
-    if (activeTab === "search") {
-      if (keyword) params.set("keyword", keyword)
-      if (category && category !== "all") params.set("category", category)
-      if (minPrice) params.set("minPrice", minPrice)
-      if (maxPrice) params.set("maxPrice", maxPrice)
-      if (minSales > 0) params.set("minSales", minSales.toString())
-      if (sortBy !== "sales") params.set("sortBy", sortBy)
-      if (sortOrder !== "desc") params.set("sortOrder", sortOrder)
-    } else if (activeTab === "rankings") {
-      if (selectedRanking) params.set("ranking", selectedRanking)
+      if (!response.ok) {
+        throw new Error(`Falha ao buscar produtos: ${response.status} ${response.statusText}`)
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        const productsData = data.products || []
+        setProducts(productsData)
+        saveLastSearchResults(productsData)
+      } else {
+        throw new Error(data.message || "Falha ao buscar produtos")
+      }
+    } catch (err: any) {
+      console.error("Erro ao buscar produtos:", err)
+      setError(err.message || "Falha ao buscar produtos")
+    } finally {
+      setIsLoading(false)
     }
+  }
 
-    if (page > 1) params.set("page", page.toString())
-    if (limit !== 20) params.set("limit", limit.toString())
+  const handleFetchProducts = async () => {
+    try {
+      setIsFetching(true)
+      setError("")
 
-    router.push(`/dashboard/busca?${params.toString()}`)
-  }, [
-    activeTab,
-    keyword,
-    category,
-    minPrice,
-    maxPrice,
-    minSales,
-    sortBy,
-    sortOrder,
-    page,
-    limit,
-    router,
-    selectedRanking,
-  ])
+      const searchBody: any = {
+        limit: Number.parseInt(searchParams.limit),
+        sortType: Number.parseInt(searchParams.sortType),
+      }
 
-  // Função para buscar produtos
-  const fetchProducts = useCallback(
-    async (forceRefresh = false) => {
-      try {
-        // Verificar se temos parâmetros suficientes para busca
-        if (
-          activeTab === "search" &&
-          !keyword &&
-          (category === "all" || !category) &&
-          keyword.length < 2 &&
-          (category === "all" || !category)
-        ) {
-          setProducts([])
-          setError("")
-          setTotalResults(0)
-          setTotalPages(1)
-          setSearchTitle("")
-          return
-        }
+      if (searchParams.category) searchBody.category = searchParams.category
+      if (searchParams.keyword) searchBody.keyword = searchParams.keyword
+      if (searchParams.minPrice) searchBody.minPrice = Number.parseFloat(searchParams.minPrice)
+      if (searchParams.maxPrice) searchBody.maxPrice = Number.parseFloat(searchParams.maxPrice)
+      if (searchParams.minRating) searchBody.minRating = Number.parseFloat(searchParams.minRating)
+      if (searchParams.minDiscount) searchBody.minDiscountRate = Number.parseInt(searchParams.minDiscount)
 
-        setIsLoading(true)
+      const response = await fetch("/api/fetch-shopee", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(searchBody),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(
+          errorData.message || `Falha ao buscar produtos da Shopee: ${response.status} ${response.statusText}`,
+        )
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        const productsData = data.products || []
+        setProducts(productsData)
+        saveLastSearchResults(productsData)
         setError("")
-
-        // Construir URL da API
-        const apiUrl = new URL(`${window.location.origin}/api/fetch-shopee`)
-
-        // Parâmetros comuns
-        apiUrl.searchParams.append("page", page.toString())
-        apiUrl.searchParams.append("limit", limit.toString())
-        if (forceRefresh) apiUrl.searchParams.append("forceRefresh", "true")
-
-        // Parâmetros específicos baseados na aba ativa
-        if (activeTab === "search") {
-          // Busca normal com palavra-chave e filtros
-          if (keyword) apiUrl.searchParams.append("keyword", keyword)
-          if (category && category !== "all") apiUrl.searchParams.append("category", category)
-          if (minPrice) apiUrl.searchParams.append("minPrice", minPrice)
-          if (maxPrice) apiUrl.searchParams.append("maxPrice", maxPrice)
-          if (minSales > 0) apiUrl.searchParams.append("minSales", minSales.toString())
-          apiUrl.searchParams.append("sortBy", sortBy)
-          apiUrl.searchParams.append("sortOrder", sortOrder)
-
-          setSearchTitle(
-            keyword
-              ? `Resultados para "${keyword}"${category !== "all" ? ` em ${CATEGORIES.find((c) => c.id === category)?.name || ""}` : ""}`
-              : category !== "all"
-                ? `Produtos em ${CATEGORIES.find((c) => c.id === category)?.name || ""}`
-                : "Todos os produtos",
-          )
-        } else if (activeTab === "rankings") {
-          // Busca por ranking pré-definido
-          if (selectedRanking) {
-            const ranking = RANKINGS.find((r) => r.id === selectedRanking)
-            if (ranking) {
-              if (ranking.category !== "all") apiUrl.searchParams.append("category", ranking.category)
-              apiUrl.searchParams.append("sortBy", ranking.sortBy)
-              apiUrl.searchParams.append("sortOrder", ranking.sortOrder)
-              setSearchTitle(ranking.name)
-            }
-          } else {
-            // Ranking padrão: mais vendidos geral
-            apiUrl.searchParams.append("sortBy", "sales")
-            apiUrl.searchParams.append("sortOrder", "desc")
-            setSearchTitle("Mais Vendidos Geral")
-          }
-        }
-
-        logger.info("Buscando produtos", {
-          activeTab,
-          keyword,
-          category,
-          minPrice,
-          maxPrice,
-          minSales,
-          sortBy,
-          sortOrder,
-          page,
-          limit,
-          selectedRanking,
-          forceRefresh,
-        })
-
-        const response = await fetch(apiUrl.toString())
-        const data = await response.json()
-
-        if (!response.ok) {
-          throw new Error(data.message || "Erro ao buscar produtos")
-        }
-
-        if (data.success) {
-          setProducts(data.products || [])
-          setTotalResults(data.total || 0)
-          setTotalPages(data.totalPages || 1)
-          setDataSource(data.source || "")
-          logger.info(`Busca concluída. Encontrados ${data.products?.length || 0} produtos`)
-        } else {
-          throw new Error(data.message || "Erro desconhecido ao buscar produtos")
-        }
-      } catch (error: any) {
-        logger.error("Erro na busca de produtos", { error })
-        setError(error.message || "Ocorreu um erro ao buscar produtos. Tente novamente.")
-        setProducts([])
-        setTotalResults(0)
-        setTotalPages(1)
-        setSearchTitle("")
-      } finally {
-        setIsLoading(false)
+      } else {
+        throw new Error(data.message || "Falha ao buscar produtos da Shopee")
       }
-    },
-    [activeTab, keyword, category, minPrice, maxPrice, minSales, sortBy, sortOrder, page, limit, selectedRanking],
-  )
+    } catch (err: any) {
+      setError(err.message || "Falha ao buscar produtos da Shopee")
+      console.error("Erro ao buscar produtos da Shopee:", err)
+    } finally {
+      setIsFetching(false)
+    }
+  }
 
-  // Função debounce para busca
-  const debouncedFetch = useCallback(
-    debounce(() => {
-      fetchProducts()
-      updateUrlParams()
-    }, 800),
-    [fetchProducts, updateUrlParams],
-  )
-
-  // Efeito para contar filtros ativos
   useEffect(() => {
-    let count = 0
-    if (category && category !== "all") count++
-    if (minPrice) count++
-    if (maxPrice) count++
-    if (minSales > 0) count++
-    if (sortBy !== "sales") count++
-    if (sortOrder !== "desc") count++
+    const filters = []
 
-    setActiveFilters(count)
-  }, [category, minPrice, maxPrice, minSales, sortBy, sortOrder])
+    if (searchParams.keyword) filters.push(`Palavra-chave: ${searchParams.keyword}`)
+    if (searchParams.category) filters.push(`Categoria: ${searchParams.category}`)
+    if (searchParams.minPrice) filters.push(`Preço mín: R$${searchParams.minPrice}`)
+    if (searchParams.maxPrice) filters.push(`Preço máx: R$${searchParams.maxPrice}`)
+    if (searchParams.minRating) filters.push(`Avaliação mín: ${searchParams.minRating}★`)
+    if (searchParams.minDiscount) filters.push(`Desconto mín: ${searchParams.minDiscount}%`)
 
-  // Efeito para buscar produtos quando os parâmetros mudam
-  useEffect(() => {
-    if (initialRender.current) {
-      initialRender.current = false
-
-      // Buscar produtos apenas se houver parâmetros na URL
-      if (activeTab === "search" && (keyword || (category && category !== "all"))) {
-        fetchProducts()
-      } else if (activeTab === "rankings") {
-        fetchProducts()
-      }
-      return
-    }
-
-    // Resetar página ao mudar filtros
-    if (page > 1) {
-      setPage(1)
-      return
-    }
-
-    debouncedFetch()
-  }, [
-    activeTab,
-    keyword,
-    category,
-    minPrice,
-    maxPrice,
-    minSales,
-    sortBy,
-    sortOrder,
-    limit,
-    selectedRanking,
-    debouncedFetch,
-    fetchProducts,
-    page,
-  ])
-
-  // Efeito para atualizar a URL quando a página muda
-  useEffect(() => {
-    if (!initialRender.current) {
-      updateUrlParams()
-    }
-  }, [page, updateUrlParams])
-
-  // Efeito para carregar parâmetros da URL ao iniciar
-  useEffect(() => {
-    const tab = searchParams.get("tab")
-    if (tab) {
-      setActiveTab(tab)
-    }
-
-    const ranking = searchParams.get("ranking")
-    if (ranking) {
-      setSelectedRanking(ranking)
-    }
+    setActiveFilters(filters)
   }, [searchParams])
 
-  // Função para limpar todos os filtros
-  const clearFilters = () => {
-    setCategory("all")
-    setMinPrice("")
-    setMaxPrice("")
-    setMinSales(0)
-    setSortBy("sales")
-    setSortOrder("desc")
-    setPage(1)
-  }
-
-  // Função para selecionar um produto
-  const handleSelectProduct = (productId: string) => {
-    router.push(`/dashboard/designer?productId=${productId}`)
-  }
-
-  // Função para forçar atualização dos produtos
-  const handleRefresh = () => {
-    fetchProducts(true)
-  }
-
-  // Função para mudar de aba
-  const handleTabChange = (value: string) => {
-    setActiveTab(value)
-    setPage(1)
-
-    // Se mudar para rankings e não tiver um ranking selecionado, selecionar o primeiro
-    if (value === "rankings" && !selectedRanking) {
-      setSelectedRanking(RANKINGS[0].id)
+  const clearFilter = (filter: string) => {
+    if (filter.startsWith("Palavra-chave:")) {
+      setSearchParams({ ...searchParams, keyword: "" })
+    } else if (filter.startsWith("Categoria:")) {
+      setSearchParams({ ...searchParams, category: "" })
+    } else if (filter.startsWith("Preço mín:")) {
+      setSearchParams({ ...searchParams, minPrice: "" })
+    } else if (filter.startsWith("Preço máx:")) {
+      setSearchParams({ ...searchParams, maxPrice: "" })
+    } else if (filter.startsWith("Avaliação mín:")) {
+      setSearchParams({ ...searchParams, minRating: "" })
+    } else if (filter.startsWith("Desconto mín:")) {
+      setSearchParams({ ...searchParams, minDiscount: "" })
     }
   }
 
-  // Função para selecionar um ranking
-  const handleRankingSelect = (rankingId: string) => {
-    setSelectedRanking(rankingId)
-    setPage(1)
+  const clearAllFilters = () => {
+    setSearchParams({
+      ...searchParams,
+      keyword: "",
+      category: "",
+      minPrice: "",
+      maxPrice: "",
+      minRating: "",
+      minDiscount: "",
+    })
   }
+
+  useEffect(() => {
+    fetchProducts()
+  }, [])
 
   return (
     <div className="space-y-6">
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="search" className="flex items-center gap-2">
-            <Search className="h-4 w-4" />
-            <span>Busca Personalizada</span>
-          </TabsTrigger>
-          <TabsTrigger value="rankings" className="flex items-center gap-2">
-            <TrendingUp className="h-4 w-4" />
-            <span>Rankings Populares</span>
-          </TabsTrigger>
-        </TabsList>
+      <div className="flex flex-col space-y-4">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-grow">
+            <Input
+              placeholder="Buscar produtos por palavra-chave..."
+              value={searchParams.keyword}
+              onChange={(e) => setSearchParams({ ...searchParams, keyword: e.target.value })}
+              className="pr-10"
+            />
+            {searchParams.keyword && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-0 top-0 h-full"
+                onClick={() => setSearchParams({ ...searchParams, keyword: "" })}
+              >
+                <X className="h-4 w-4" />
+                <span className="sr-only">Limpar busca</span>
+              </Button>
+            )}
+          </div>
 
-        <TabsContent value="search" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-[2fr_1fr_auto]">
-            <div className="relative">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Buscar produtos na Shopee..."
-                className="pl-8"
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-              />
-            </div>
+          <div className="flex gap-2">
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="outline" className="flex gap-2">
+                  <Filter className="h-4 w-4" />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {activeFilters.length > 0 && (
+                    <Badge variant="secondary" className="ml-1">
+                      {activeFilters.length}
+                    </Badge>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent className="w-[300px] sm:w-[400px] overflow-y-auto">
+                <SheetHeader>
+                  <SheetTitle>Filtros de Busca</SheetTitle>
+                </SheetHeader>
 
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger>
-                <SelectValue placeholder="Categoria" />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                <div className="py-4 space-y-6">
+                  <div className="space-y-2">
+                    <Label htmlFor="limit">Limite de Produtos</Label>
+                    <Select
+                      value={searchParams.limit}
+                      onValueChange={(value) => setSearchParams({ ...searchParams, limit: value })}
+                    >
+                      <SelectTrigger id="limit">
+                        <SelectValue placeholder="Selecione o limite" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10 produtos</SelectItem>
+                        <SelectItem value="20">20 produtos</SelectItem>
+                        <SelectItem value="50">50 produtos</SelectItem>
+                        <SelectItem value="100">100 produtos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            <div className="flex gap-2">
-              <Sheet>
-                <SheetTrigger asChild>
-                  <Button variant="outline" className="flex gap-2">
-                    <Filter className="h-4 w-4" />
-                    Filtros
-                    {activeFilters > 0 && (
-                      <Badge variant="secondary" className="ml-1">
-                        {activeFilters}
-                      </Badge>
-                    )}
-                  </Button>
-                </SheetTrigger>
-                <SheetContent>
-                  <SheetHeader>
-                    <SheetTitle>Filtros de Busca</SheetTitle>
-                    <SheetDescription>Refine sua busca de produtos</SheetDescription>
-                  </SheetHeader>
+                  <div className="space-y-2">
+                    <Label htmlFor="sortType">Ordenação</Label>
+                    <Select
+                      value={searchParams.sortType}
+                      onValueChange={(value) => setSearchParams({ ...searchParams, sortType: value })}
+                    >
+                      <SelectTrigger id="sortType">
+                        <SelectValue placeholder="Selecione a ordenação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">Mais Vendidos</SelectItem>
+                        <SelectItem value="1">Mais Recentes</SelectItem>
+                        <SelectItem value="3">Preço (menor para maior)</SelectItem>
+                        <SelectItem value="4">Preço (maior para menor)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                  <div className="py-4 space-y-6">
-                    <div className="space-y-2">
-                      <Label htmlFor="price-range">Faixa de Preço (R$)</Label>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          id="min-price"
-                          type="number"
-                          placeholder="Mín"
-                          value={minPrice}
-                          onChange={(e) => setMinPrice(e.target.value)}
-                          min="0"
-                          step="0.01"
-                        />
-                        <span>-</span>
-                        <Input
-                          id="max-price"
-                          type="number"
-                          placeholder="Máx"
-                          value={maxPrice}
-                          onChange={(e) => setMaxPrice(e.target.value)}
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="category">ID da Categoria</Label>
+                    <Input
+                      id="category"
+                      placeholder="ID da categoria (opcional)"
+                      value={searchParams.category}
+                      onChange={(e) => setSearchParams({ ...searchParams, category: e.target.value })}
+                    />
+                  </div>
 
-                    <div className="space-y-2">
-                      <Label htmlFor="min-sales">Vendas Mínimas: {minSales}</Label>
-                      <Slider
-                        id="min-sales"
-                        value={[minSales]}
-                        min={0}
-                        max={1000}
-                        step={10}
-                        onValueChange={(value) => setMinSales(value[0])}
+                  <div className="space-y-2">
+                    <Label>Faixa de Preço (R$)</Label>
+                    <div className="flex gap-4">
+                      <Input
+                        placeholder="Mínimo"
+                        type="number"
+                        min="0"
+                        value={searchParams.minPrice}
+                        onChange={(e) => setSearchParams({ ...searchParams, minPrice: e.target.value })}
                       />
-                      <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>0</span>
-                        <span>500</span>
-                        <span>1000+</span>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="sort-by">Ordenar por</Label>
-                      <Select value={sortBy} onValueChange={setSortBy}>
-                        <SelectTrigger id="sort-by">
-                          <SelectValue placeholder="Ordenar por" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="sales">Vendas</SelectItem>
-                          <SelectItem value="price">Preço</SelectItem>
-                          <SelectItem value="rating">Avaliação</SelectItem>
-                          <SelectItem value="discount">Desconto</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="sort-order">Ordem</Label>
-                      <Select value={sortOrder} onValueChange={setSortOrder}>
-                        <SelectTrigger id="sort-order">
-                          <SelectValue placeholder="Ordem" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="desc">Maior para menor</SelectItem>
-                          <SelectItem value="asc">Menor para maior</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="results-per-page">Resultados por página</Label>
-                      <Select value={limit.toString()} onValueChange={(value) => setLimit(Number.parseInt(value))}>
-                        <SelectTrigger id="results-per-page">
-                          <SelectValue placeholder="Resultados por página" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10">10</SelectItem>
-                          <SelectItem value="20">20</SelectItem>
-                          <SelectItem value="30">30</SelectItem>
-                          <SelectItem value="50">50</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <Input
+                        placeholder="Máximo"
+                        type="number"
+                        min="0"
+                        value={searchParams.maxPrice}
+                        onChange={(e) => setSearchParams({ ...searchParams, maxPrice: e.target.value })}
+                      />
                     </div>
                   </div>
 
-                  <SheetFooter className="flex flex-col sm:flex-row gap-2">
-                    <Button variant="outline" onClick={clearFilters} className="w-full">
+                  <div className="space-y-2">
+                    <Label htmlFor="minRating">Avaliação Mínima</Label>
+                    <Select
+                      value={searchParams.minRating}
+                      onValueChange={(value) => setSearchParams({ ...searchParams, minRating: value })}
+                    >
+                      <SelectTrigger id="minRating">
+                        <SelectValue placeholder="Qualquer avaliação" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Qualquer avaliação</SelectItem>
+                        <SelectItem value="3">3 estrelas ou mais</SelectItem>
+                        <SelectItem value="4">4 estrelas ou mais</SelectItem>
+                        <SelectItem value="4.5">4.5 estrelas ou mais</SelectItem>
+                        <SelectItem value="4.8">4.8 estrelas ou mais</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="minDiscount">Desconto Mínimo</Label>
+                    <Select
+                      value={searchParams.minDiscount}
+                      onValueChange={(value) => setSearchParams({ ...searchParams, minDiscount: value })}
+                    >
+                      <SelectTrigger id="minDiscount">
+                        <SelectValue placeholder="Qualquer desconto" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Qualquer desconto</SelectItem>
+                        <SelectItem value="10">10% ou mais</SelectItem>
+                        <SelectItem value="20">20% ou mais</SelectItem>
+                        <SelectItem value="30">30% ou mais</SelectItem>
+                        <SelectItem value="40">40% ou mais</SelectItem>
+                        <SelectItem value="50">50% ou mais</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex justify-between pt-4">
+                    <Button variant="outline" onClick={clearAllFilters}>
                       Limpar Filtros
                     </Button>
-                    <SheetClose asChild>
-                      <Button className="w-full">Aplicar Filtros</Button>
-                    </SheetClose>
-                  </SheetFooter>
-                </SheetContent>
-              </Sheet>
+                    <Button onClick={handleFetchProducts} disabled={isFetching}>
+                      Aplicar Filtros
+                    </Button>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
 
-              <Button variant="outline" onClick={handleRefresh} disabled={isLoading}>
-                <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="rankings" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-3 sm:grid-cols-2">
-            {RANKINGS.map((ranking) => (
-              <Card
-                key={ranking.id}
-                className={`cursor-pointer transition-all hover:shadow-md ${selectedRanking === ranking.id ? "border-primary ring-2 ring-primary/20" : ""}`}
-                onClick={() => handleRankingSelect(ranking.id)}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    {ranking.id === "bestsellers" && <TrendingUp className="h-5 w-5 text-orange-500" />}
-                    {ranking.id === "discounts" && <Zap className="h-5 w-5 text-purple-500" />}
-                    {ranking.name}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>
-                    {ranking.id === "bestsellers" && "Os produtos mais vendidos de todas as categorias"}
-                    {ranking.id === "electronics" && "Eletrônicos com maior volume de vendas"}
-                    {ranking.id === "fashion" && "Itens de moda feminina mais populares"}
-                    {ranking.id === "beauty" && "Produtos de beleza mais vendidos"}
-                    {ranking.id === "home" && "Itens para casa com maior demanda"}
-                    {ranking.id === "tech" && "Tecnologia e acessórios mais populares"}
-                    {ranking.id === "sports" && "Equipamentos esportivos mais vendidos"}
-                    {ranking.id === "discounts" && "Produtos com os maiores descontos"}
-                  </CardDescription>
-                </CardContent>
-                <CardFooter className="pt-0">
-                  {selectedRanking === ranking.id ? (
-                    <Badge variant="outline" className="bg-primary/10">
-                      Selecionado
-                    </Badge>
-                  ) : (
-                    <Badge variant="outline">Clique para ver</Badge>
-                  )}
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-
-          <div className="flex justify-end mt-4">
-            <Button variant="outline" onClick={handleRefresh} disabled={isLoading} className="flex items-center gap-2">
-              <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
-              Atualizar Ranking
+            <Button onClick={handleFetchProducts} disabled={isFetching}>
+              {isFetching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Buscando...
+                </>
+              ) : (
+                <>
+                  <Search className="mr-2 h-4 w-4" />
+                  Buscar
+                </>
+              )}
             </Button>
           </div>
-        </TabsContent>
-      </Tabs>
-
-      {/* Informações da busca */}
-      {products.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-semibold">{searchTitle}</h2>
-            <span className="text-muted-foreground">
-              ({products.length} de {totalResults} resultados)
-            </span>
-            {dataSource && (
-              <Badge variant="outline" className="text-xs">
-                Fonte: {dataSource === "cache" ? "Cache" : "API"}
-              </Badge>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {activeTab === "search" && activeFilters > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 px-2 text-xs">
-                Limpar filtros ({activeFilters})
-              </Button>
-            )}
-          </div>
         </div>
-      )}
 
-      {/* Lista de produtos */}
-      <ProductList products={products} isLoading={isLoading} error={error} onSelectProduct={handleSelectProduct} />
+        {activeFilters.length > 0 && (
+          <div className="flex flex-wrap gap-2 items-center">
+            {activeFilters.map((filter) => (
+              <Badge key={filter} variant="secondary" className="flex items-center gap-1">
+                {filter}
+                <Button variant="ghost" size="icon" className="h-4 w-4 p-0 ml-1" onClick={() => clearFilter(filter)}>
+                  <X className="h-3 w-3" />
+                  <span className="sr-only">Remover filtro</span>
+                </Button>
+              </Badge>
+            ))}
+            <Button variant="ghost" size="sm" className="h-7" onClick={clearAllFilters}>
+              Limpar todos
+            </Button>
+          </div>
+        )}
+      </div>
 
-      {/* Paginação */}
-      {totalPages > 1 && <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Produtos</CardTitle>
+          <Select
+            value={searchParams.sortType}
+            onValueChange={(value) => {
+              setSearchParams({ ...searchParams, sortType: value })
+              if (products.length > 0) handleFetchProducts()
+            }}
+          >
+            <SelectTrigger className="w-[180px]">
+              <ArrowDownUp className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Ordenar por" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="2">Mais Vendidos</SelectItem>
+              <SelectItem value="1">Mais Recentes</SelectItem>
+              <SelectItem value="3">Preço (menor para maior)</SelectItem>
+              <SelectItem value="4">Preço (maior para menor)</SelectItem>
+            </SelectContent>
+          </Select>
+        </CardHeader>
+        <CardContent>
+          <ProductList
+            products={products}
+            isLoading={isLoading || isFetching}
+            error={error}
+            onSelectProduct={() => {}}
+          />
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createLogger } from "@/lib/logger"
-import { renderProductCardTemplate, createFallbackDescription } from "@/lib/template-renderer"
 import { getCachedProducts } from "@/lib/redis"
+import { createFallbackDescription } from "@/lib/card-generation-service"
 
 const logger = createLogger("API:OneClickDownload")
 
@@ -29,11 +29,8 @@ export async function GET(req: NextRequest) {
 
     logger.info(`Selected random product: ${product.itemId}`)
 
-    // Create description
-    const description = createFallbackDescription(product)
-
     // Generate HTML for download page
-    const downloadPage = generateDownloadPage(product, description)
+    const downloadPage = await generateDownloadPage(product, req.nextUrl.origin)
 
     // Return the HTML page
     return new NextResponse(downloadPage, {
@@ -54,7 +51,30 @@ export async function GET(req: NextRequest) {
   }
 }
 
-function generateDownloadPage(product: any, description: string) {
+async function generateDownloadPage(product: any, apiBaseUrl: string) {
+  // Gerar descrição e cards usando o serviço centralizado
+  let description = createFallbackDescription(product)
+
+  try {
+    // Tentar gerar descrição com API
+    const descResponse = await fetch(`${apiBaseUrl}/api/generate-description`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ product }),
+    })
+
+    if (descResponse.ok) {
+      const descData = await descResponse.json()
+      if (descData.success) {
+        description = descData.description
+      }
+    }
+  } catch (error) {
+    logger.warn("Failed to generate description, using fallback", { error })
+  }
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -131,14 +151,14 @@ function generateDownloadPage(product: any, description: string) {
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-            Template Moderno
+            Estilo Moderno
           </button>
           
-          <button id="downloadAgemini" class="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-md flex items-center justify-center">
+          <button id="downloadAlternative" class="bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded-md flex items-center justify-center">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd" />
             </svg>
-            Template Agemini
+            Estilo Alternativo
           </button>
           
           <button id="downloadAll" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md flex items-center justify-center">
@@ -162,84 +182,25 @@ function generateDownloadPage(product: any, description: string) {
     </div>
     
     <div class="bg-white rounded-lg shadow-lg p-6">
-      <h2 class="text-xl font-semibold text-gray-800 mb-4">Pré-visualização dos Templates</h2>
+      <h2 class="text-xl font-semibold text-gray-800 mb-4">Pré-visualização</h2>
+      <p class="text-gray-600 mb-6">Os cards serão gerados usando a API Canvas e a descrição otimizada pela API Gemini.</p>
       
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <h3 class="font-medium text-gray-700 mb-2">Template Moderno</h3>
-          <div class="border border-gray-200 rounded-lg p-2 bg-gray-50">
-            <iframe id="previewModern" class="w-full h-[500px] border-0" srcdoc="${encodeURIComponent(renderProductCardTemplate(product, description, "portrait"))}"></iframe>
-          </div>
-        </div>
-        
-        <div>
-          <h3 class="font-medium text-gray-700 mb-2">Template Agemini</h3>
-          <div class="border border-gray-200 rounded-lg p-2 bg-gray-50">
-            <iframe id="previewAgemini" class="w-full h-[500px] border-0" srcdoc="${encodeURIComponent(renderProductCardTemplate(product, description, "ageminipara"))}"></iframe>
-          </div>
+      <div id="previewContainer" class="flex justify-center items-center p-8 bg-gray-200 rounded-lg">
+        <div class="text-center">
+          <svg class="animate-spin h-10 w-10 text-blue-600 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+          <p>Gerando pré-visualização...</p>
         </div>
       </div>
     </div>
   </div>
   
   <script>
-    // Função para capturar o conteúdo de um iframe como imagem
-    async function captureIframe(iframeId) {
-      return new Promise((resolve, reject) => {
-        const iframe = document.getElementById(iframeId);
-        const iframeWindow = iframe.contentWindow;
-        
-        // Esperar o iframe carregar completamente
-        if (iframe.complete) {
-          try {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // Definir dimensões do canvas
-            canvas.width = iframe.contentDocument.documentElement.scrollWidth;
-            canvas.height = iframe.contentDocument.documentElement.scrollHeight;
-            
-            // Criar uma imagem HTML a partir do conteúdo do iframe
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            
-            // Converter o documento HTML para uma URL de dados
-            const data = new XMLSerializer().serializeToString(iframe.contentDocument);
-            const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvas.width + '" height="' + canvas.height + '">' +
-                        '<foreignObject width="100%" height="100%">' +
-                        '<div xmlns="http://www.w3.org/1999/xhtml">' +
-                        data +
-                        '</div></foreignObject></svg>';
-            
-            const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-            
-            img.onload = function() {
-              ctx.drawImage(img, 0, 0);
-              canvas.toBlob(function(blob) {
-                resolve(blob);
-              }, 'image/png');
-            };
-            
-            img.onerror = function(e) {
-              reject(new Error('Failed to load image: ' + e));
-            };
-            
-            img.src = url;
-          } catch (error) {
-            reject(error);
-          }
-        } else {
-          iframe.onload = function() {
-            try {
-              const canvas = document.createElement('canvas');
-              // ... mesmo código acima
-            } catch (error) {
-              reject(error);
-            }
-          };
-        }
-      });
-    }
+    // Dados do produto
+    const product = ${JSON.stringify(product)};
+    const description = ${JSON.stringify(description)};
     
     // Função para mostrar o status de progresso
     function updateStatus(percent, text) {
@@ -249,18 +210,125 @@ function generateDownloadPage(product: any, description: string) {
       document.getElementById('statusText').textContent = text;
     }
     
+    // Função para gerar cards usando Canvas API
+    async function generateCards() {
+      updateStatus(10, 'Iniciando geração de cards...');
+      
+      try {
+        // Implementação simplificada da geração de cards com Canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext('2d');
+        
+        // Fundo preto
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Carregar imagem do produto
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = product.imageUrl;
+        });
+        
+        // Desenhar imagem
+        const imgHeight = canvas.height * 0.5;
+        ctx.drawImage(img, 0, 0, canvas.width, imgHeight);
+        
+        // Adicionar gradiente
+        const gradient = ctx.createLinearGradient(0, imgHeight - 100, 0, imgHeight);
+        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+        gradient.addColorStop(1, 'rgba(0,0,0,1)');
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, imgHeight - 100, canvas.width, 100);
+        
+        // Texto do produto
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 48px Arial';
+        ctx.fillText(product.productName.substring(0, 30) + (product.productName.length > 30 ? '...' : ''), 40, imgHeight + 80);
+        
+        // Preço
+        ctx.fillStyle = '#FF4D4F';
+        ctx.font = 'bold 72px Arial';
+        ctx.fillText('R$ ' + Number(product.price).toFixed(2), 40, imgHeight + 180);
+        
+        // Avaliação e vendas
+        ctx.fillStyle = '#CCCCCC';
+        ctx.font = '36px Arial';
+        ctx.fillText('⭐ ' + (product.ratingStar || '4.5') + ' • ' + product.sales + '+ vendas', 40, imgHeight + 250);
+        
+        // Descrição
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = '32px Arial';
+        const descLines = description.split('\\n');
+        let y = imgHeight + 350;
+        for (let i = 0; i < Math.min(descLines.length, 5); i++) {
+          ctx.fillText(descLines[i].substring(0, 40) + (descLines[i].length > 40 ? '...' : ''), 40, y);
+          y += 40;
+        }
+        
+        // Botão CTA
+        ctx.fillStyle = '#FF4D4F';
+        ctx.fillRect(40, canvas.height - 150, canvas.width - 80, 80);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.font = 'bold 40px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('COMPRE AGORA • LINK NA BIO', canvas.width / 2, canvas.height - 100);
+        
+        // Converter para blob
+        updateStatus(70, 'Convertendo imagem...');
+        
+        const modernBlob = await new Promise(resolve => {
+          canvas.toBlob(blob => resolve(blob), 'image/png');
+        });
+        
+        // Gerar versão alternativa (com fundo diferente)
+        ctx.fillStyle = '#0D0D2B'; // Fundo azul escuro
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, imgHeight);
+        
+        // Converter segunda versão para blob
+        const alternativeBlob = await new Promise(resolve => {
+          canvas.toBlob(blob => resolve(blob), 'image/png');
+        });
+        
+        updateStatus(90, 'Cards gerados com sucesso!');
+        
+        // Mostrar pré-visualização
+        const previewContainer = document.getElementById('previewContainer');
+        previewContainer.innerHTML = '';
+        
+        const previewImg = document.createElement('img');
+        previewImg.src = URL.createObjectURL(modernBlob);
+        previewImg.className = 'max-h-[500px] rounded-lg shadow-lg';
+        previewContainer.appendChild(previewImg);
+        
+        return {
+          modernBlob,
+          alternativeBlob
+        };
+      } catch (error) {
+        console.error('Erro ao gerar cards:', error);
+        updateStatus(0, 'Erro ao gerar cards: ' + error.message);
+        throw error;
+      }
+    }
+    
     // Função para baixar o template moderno
     document.getElementById('downloadModern').addEventListener('click', async function() {
       try {
-        updateStatus(10, 'Capturando template moderno...');
+        updateStatus(10, 'Gerando card moderno...');
         
-        // Capturar o iframe como imagem
-        const blob = await captureIframe('previewModern');
+        const { modernBlob } = await generateCards();
         
         updateStatus(90, 'Preparando download...');
         
         // Baixar a imagem
-        saveAs(blob, 'product_${product.itemId}_modern.png');
+        saveAs(modernBlob, 'product_${product.itemId}_modern.png');
         
         updateStatus(100, 'Download concluído!');
       } catch (error) {
@@ -269,22 +337,21 @@ function generateDownloadPage(product: any, description: string) {
       }
     });
     
-    // Função para baixar o template agemini
-    document.getElementById('downloadAgemini').addEventListener('click', async function() {
+    // Função para baixar o template alternativo
+    document.getElementById('downloadAlternative').addEventListener('click', async function() {
       try {
-        updateStatus(10, 'Capturando template agemini...');
+        updateStatus(10, 'Gerando card alternativo...');
         
-        // Capturar o iframe como imagem
-        const blob = await captureIframe('previewAgemini');
+        const { alternativeBlob } = await generateCards();
         
         updateStatus(90, 'Preparando download...');
         
         // Baixar a imagem
-        saveAs(blob, 'product_${product.itemId}_agemini.png');
+        saveAs(alternativeBlob, 'product_${product.itemId}_alternative.png');
         
         updateStatus(100, 'Download concluído!');
       } catch (error) {
-        console.error('Erro ao baixar template agemini:', error);
+        console.error('Erro ao baixar template alternativo:', error);
         updateStatus(0, 'Erro: ' + error.message);
       }
     });
@@ -292,14 +359,10 @@ function generateDownloadPage(product: any, description: string) {
     // Função para baixar todos os templates como ZIP
     document.getElementById('downloadAll').addEventListener('click', async function() {
       try {
-        updateStatus(10, 'Capturando templates...');
+        updateStatus(10, 'Gerando cards...');
         
-        // Capturar os iframes como imagens
-        const modernBlob = await captureIframe('previewModern');
-        updateStatus(30, 'Template moderno capturado...');
-        
-        const ageminiBlob = await captureIframe('previewAgemini');
-        updateStatus(50, 'Template agemini capturado...');
+        const { modernBlob, alternativeBlob } = await generateCards();
+        updateStatus(50, 'Cards gerados com sucesso!');
         
         // Criar arquivo de texto com informações do produto
         const textContent = \`
@@ -323,7 +386,7 @@ Link: ${product.offerLink || "N/A"}
         // Criar ZIP
         const zip = new JSZip();
         zip.file('product_${product.itemId}_modern.png', modernBlob);
-        zip.file('product_${product.itemId}_agemini.png', ageminiBlob);
+        zip.file('product_${product.itemId}_alternative.png', alternativeBlob);
         zip.file('product_${product.itemId}_info.txt', textBlob);
         
         // Gerar o arquivo ZIP
@@ -339,6 +402,12 @@ Link: ${product.offerLink || "N/A"}
         console.error('Erro ao baixar todos os templates:', error);
         updateStatus(0, 'Erro: ' + error.message);
       }
+    });
+    
+    // Iniciar geração de cards para pré-visualização
+    generateCards().catch(error => {
+      console.error('Erro na pré-visualização:', error);
+      document.getElementById('previewContainer').innerHTML = '<div class="text-center text-red-600"><p>Erro ao gerar pré-visualização: ' + error.message + '</p></div>';
     });
     
     // Iniciar download automático após 2 segundos
