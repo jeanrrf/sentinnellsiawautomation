@@ -1,822 +1,451 @@
 import { Redis } from "@upstash/redis"
+import { CACHE_KEYS } from "@/lib/constants"
 import { createLogger } from "./logger"
 
 const logger = createLogger("Redis")
 
-export const CACHE_KEYS = {
-  PRODUCTS: "shopee:products",
-  PRODUCT_PREFIX: "shopee:product:", // Adicionando prefixo para produtos individuais
-  DESCRIPTION_PREFIX: "shopee:description:",
-  PROCESSED_IDS: "shopee:processed_ids",
-  CARDS: "shopee:cards",
-  CARD_PREFIX: "shopee:card:",
-  PUBLISHED_CARDS: "shopee:published_cards",
-  EXCLUDED_PRODUCTS: "shopee:excluded_products", // Produtos que não devem ser buscados novamente
+// Simulação de dados em memória para fallback
+const inMemoryStore: Record<string, any> = {
+  videos: new Set<string>(),
+  publishedVideos: new Set<string>(),
+  videoData: new Map<string, any>(),
+  products: null,
+  descriptions: new Map<string, string>(),
+  processedIds: new Set<string>(),
+  excludedProducts: new Set<string>(),
 }
 
-// Cache TTLs in seconds
-export const CACHE_TTL = {
-  PRODUCTS: 60 * 60, // 1 hour
-  DESCRIPTIONS: 60 * 60 * 24, // 24 hours
-  PROCESSED_IDS: 60 * 60 * 24 * 7, // 7 days
-  PUBLISHED_CARDS: 60 * 60 * 24 * 30, // 30 days
-  EXCLUDED_PRODUCTS: 60 * 60 * 24 * 90, // 90 days (produtos que não devem ser buscados novamente)
-  CARDS: 60 * 60 * 24 * 30, // 30 days for cards
-}
+// Estado do fallback
+let isFallbackActive = false
 
-// Variável para armazenar a instância do cliente Redis
-let redisClient: Redis | null = null
+// Initialize Redis client
+let redis: Redis | null = null
 
-// Função para criar e retornar o cliente Redis
-export function getRedisClient() {
-  try {
-    // Se já temos uma instância, retorná-la
-    if (redisClient) {
-      return redisClient
-    }
-
-    // Verificar se as variáveis de ambiente necessárias estão definidas
-    const url = process.env.KV_REST_API_URL || process.env.KV_URL || process.env.REDIS_URL
-    const token = process.env.KV_REST_API_TOKEN || process.env.KV_REST_API_READ_ONLY_TOKEN
-
-    if (!url || !token) {
-      logger.error("Variáveis de ambiente Redis não configuradas", {
-        hasUrl: !!url,
-        hasToken: !!token,
-      })
-      return null
-    }
-
-    // Criar cliente Redis usando variáveis de ambiente
-    redisClient = new Redis({
-      url,
-      token,
-      retry: {
-        retries: 3,
-        factor: 2,
-        minTimeout: 1000,
-        maxTimeout: 3000,
-      },
+try {
+  if (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN) {
+    redis = new Redis({
+      url: process.env.KV_REST_API_URL,
+      token: process.env.KV_REST_API_TOKEN,
     })
-
-    logger.info("Cliente Redis inicializado com sucesso")
-    return redisClient
-  } catch (error) {
-    logger.error("Erro ao criar cliente Redis:", error)
-    redisClient = null
-    return null
+    logger.info("Redis client initialized with Upstash")
+  } else {
+    logger.warn("Redis credentials not found. Redis functionality will be limited.")
+    isFallbackActive = true
   }
+} catch (error) {
+  logger.error("Failed to initialize Redis client with Upstash:", error)
+  isFallbackActive = true
+  redis = null
 }
 
-// Função para verificar se o Redis está disponível
+// Funções de fallback
+const fallback = {
+  isActive: () => isFallbackActive,
+  activate: () => {
+    isFallbackActive = true
+    logger.info("Redis fallback activated")
+  },
+  deactivate: () => {
+    isFallbackActive = false
+    logger.info("Redis fallback deactivated")
+  },
+  getVideos: () => {
+    const videos = []
+    for (const videoId of inMemoryStore.videos) {
+      const videoData = inMemoryStore.videoData.get(videoId)
+      if (videoData) {
+        videos.push(videoData)
+      }
+    }
+    return videos
+  },
+  getPublishedVideos: () => {
+    const videos = []
+    for (const videoId of inMemoryStore.publishedVideos) {
+      const videoData = inMemoryStore.videoData.get(videoId)
+      if (videoData) {
+        videos.push(videoData)
+      }
+    }
+    return videos
+  },
+  publishVideo: (productId: string) => {
+    const videoData = inMemoryStore.videoData.get(productId)
+    if (!videoData) {
+      return false
+    }
+    inMemoryStore.videos.delete(productId)
+    inMemoryStore.publishedVideos.add(productId)
+    videoData.status = "published"
+    videoData.publishedAt = new Date().toISOString()
+    inMemoryStore.videoData.set(productId, videoData)
+    return true
+  },
+  saveVideo: (videoData: any) => {
+    const productId = videoData.productId
+    if (!productId) {
+      return false
+    }
+    inMemoryStore.videos.add(productId)
+    inMemoryStore.videoData.set(productId, videoData)
+    return true
+  },
+  isIdProcessed: (productId: string) => {
+    return inMemoryStore.processedIds.has(productId)
+  },
+  addProcessedId: (productId: string) => {
+    inMemoryStore.processedIds.add(productId)
+    return true
+  },
+  getExcludedProducts: () => {
+    return Array.from(inMemoryStore.excludedProducts)
+  },
+  cacheProducts: (products: any[]) => {
+    inMemoryStore.products = products
+    return true
+  },
+  getCachedProducts: () => {
+    return inMemoryStore.products
+  },
+  cacheDescription: (productId: string, description: string) => {
+    inMemoryStore.descriptions.set(productId, description)
+    return true
+  },
+  getCachedDescription: (productId: string) => {
+    return inMemoryStore.descriptions.get(productId) || null
+  },
+  cleanupCache: () => {
+    inMemoryStore.products = null
+    inMemoryStore.processedIds.clear()
+    return true
+  },
+  getCachedProduct: (productId: string) => {
+    if (!inMemoryStore.products) return null
+    return inMemoryStore.products.find((p: any) => p.itemId === productId) || null
+  },
+}
+
+export function getRedisClient(): Redis | null {
+  return redis
+}
+
 export async function isRedisAvailable(): Promise<boolean> {
   try {
-    const redis = getRedisClient()
-    if (!redis) return false
-
-    // Tentar uma operação simples para verificar a conexão
-    const testKey = `redis-test-${Date.now()}`
-    await redis.set(testKey, "test", { ex: 10 })
-    const result = await redis.get(testKey)
-    return result === "test"
+    if (!redis) {
+      return false
+    }
+    await redis.ping()
+    return true
   } catch (error) {
-    logger.error("Erro ao verificar disponibilidade do Redis:", error)
+    logger.error("Redis connection failed", { error })
+    fallback.activate()
     return false
   }
 }
 
-// Função para obter produtos em cache
-export async function getCachedProducts() {
+export async function getVideos() {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter produtos")
+      if (fallback.isActive()) {
+        return fallback.getVideos()
+      }
       return []
     }
+    const videoIds = await redis.smembers(CACHE_KEYS.VIDEOS)
+    if (!videoIds || videoIds.length === 0) return []
 
-    const products = await redis.get(CACHE_KEYS.PRODUCTS)
-
-    // Se products for uma string, tente fazer o parse para JSON
-    if (typeof products === "string") {
-      try {
-        return JSON.parse(products)
-      } catch (parseError) {
-        logger.error("Erro ao fazer parse dos produtos em cache:", parseError)
-        return []
+    const videos = []
+    for (const videoId of videoIds) {
+      const video = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+      if (video) {
+        videos.push(typeof video === "string" ? JSON.parse(video) : video)
       }
     }
-
-    return products || []
+    return videos
   } catch (error) {
-    logger.error("Error getting cached products:", error)
+    logger.error("Error getting videos", { error })
+    if (fallback.isActive()) {
+      return fallback.getVideos()
+    }
     return []
   }
 }
 
-// Função para obter um produto específico do cache
-export async function getCachedProduct(productId: string) {
+export async function getPublishedVideos() {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao obter produto ${productId}`)
-      return null
+      if (fallback.isActive()) {
+        return fallback.getPublishedVideos()
+      }
+      return []
     }
+    const videoIds = await redis.smembers(CACHE_KEYS.PUBLISHED_VIDEOS)
+    if (!videoIds || videoIds.length === 0) return []
 
-    // Primeiro, tente obter o produto diretamente pela chave individual
-    const product = await redis.get(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
-
-    if (product) {
-      // Se for uma string, tente fazer o parse
-      if (typeof product === "string") {
-        try {
-          return JSON.parse(product)
-        } catch (parseError) {
-          logger.error(`Erro ao fazer parse do produto ${productId}:`, parseError)
-        }
-      } else {
-        return product
+    const videos = []
+    for (const videoId of videoIds) {
+      const video = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+      if (video) {
+        videos.push(typeof video === "string" ? JSON.parse(video) : video)
       }
     }
-
-    // Se não encontrar, tente buscar na lista completa
-    const products = await getCachedProducts()
-    if (!Array.isArray(products)) {
-      logger.warn("Produtos em cache não é um array:", typeof products)
-      return null
-    }
-
-    return products.find((p: any) => p.itemId === productId) || null
+    return videos
   } catch (error) {
-    logger.error(`Error getting cached product ${productId}:`, error)
-    return null
+    logger.error("Error getting published videos", { error })
+    if (fallback.isActive()) {
+      return fallback.getPublishedVideos()
+    }
+    return []
   }
 }
 
-// Função para obter descrição em cache
-export async function getCachedDescription(productId: string) {
+export async function publishVideo(productId: string) {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao obter descrição para produto ${productId}`)
-      return null
-    }
-
-    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`
-    const description = await redis.get(key)
-    return description || null
-  } catch (error) {
-    logger.error(`Error getting cached description for product ${productId}:`, error)
-    return null
-  }
-}
-
-// Função para salvar descrição no cache
-export async function cacheDescription(productId: string, description: string): Promise<void> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao salvar descrição para produto ${productId}`)
-      return
-    }
-
-    await redis.set(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`, description, { ex: CACHE_TTL.DESCRIPTIONS })
-  } catch (error) {
-    logger.error(`Error caching description for product ${productId}:`, error)
-  }
-}
-
-// Função para limpar o cache
-export async function clearCache() {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning("Cliente Redis não disponível ao limpar cache")
+      if (fallback.isActive()) {
+        return fallback.publishVideo(productId)
+      }
       return false
     }
-
-    // Obter todas as chaves
-    const keys = await redis.keys("shopee:*")
-
-    // Excluir cada chave
-    for (const key of keys) {
-      await redis.del(key)
+    // Get the video data
+    const videoData = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`)
+    if (!videoData) {
+      throw new Error(`Video with ID ${productId} not found`)
     }
 
-    logger.info("Cache cleared successfully")
+    // Parse the video data
+    const video = typeof videoData === "string" ? JSON.parse(videoData) : videoData
+
+    // Add the video ID to the published videos set
+    await redis.sadd(CACHE_KEYS.PUBLISHED_VIDEOS, productId)
+
+    // Update the video data with the published status and timestamp
+    video.status = "published"
+    video.publishedAt = new Date().toISOString()
+
+    // Save the updated video data
+    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${productId}`, JSON.stringify(video))
+
     return true
   } catch (error) {
-    logger.error("Error clearing cache:", error)
+    logger.error("Error publishing video", { error })
+    if (fallback.isActive()) {
+      return fallback.publishVideo(productId)
+    }
     return false
   }
 }
 
-// Adicionando as funções que estavam faltando
-export async function createCacheEntry(key: string, value: any, ttl?: number): Promise<void> {
+export async function saveVideo(videoData: any) {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao criar entrada de cache para chave ${key}`)
-      return
-    }
-
-    // Garantir que estamos armazenando uma string
-    const valueToStore = typeof value === "string" ? value : JSON.stringify(value)
-
-    if (ttl) {
-      await redis.set(key, valueToStore, { ex: ttl })
-    } else {
-      await redis.set(key, valueToStore)
-    }
-    logger.debug(`Cache entry created for key: ${key}`)
-  } catch (error) {
-    logger.error(`Error creating cache entry for key ${key}:`, error)
-  }
-}
-
-export async function getCacheEntry(key: string): Promise<any | null> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao obter entrada de cache para chave ${key}`)
-      return null
-    }
-
-    const cachedData = await redis.get(key)
-
-    if (!cachedData) return null
-
-    // Handle the case where the data might already be an object
-    if (typeof cachedData === "object" && !Array.isArray(cachedData) && cachedData !== null) {
-      logger.debug("Cached data is already an object, returning directly")
-      return cachedData
-    }
-
-    // If it's a string, parse it
-    if (typeof cachedData === "string") {
-      try {
-        return JSON.parse(cachedData)
-      } catch (parseError) {
-        logger.error("Error parsing cached data:", parseError)
-        return cachedData // Retornar o valor bruto se não for possível fazer o parse
+      if (fallback.isActive()) {
+        return fallback.saveVideo(videoData)
       }
+      return false
     }
+    // Add the video ID to the videos set
+    await redis.sadd(CACHE_KEYS.VIDEOS, videoData.productId)
 
-    logger.error("Unexpected cached data format:", typeof cachedData)
-    return cachedData // Retornar o valor como está
+    // Save the video data
+    await redis.set(`${CACHE_KEYS.VIDEO_PREFIX}${videoData.productId}`, JSON.stringify(videoData))
+
+    return true
   } catch (error) {
-    logger.error("Error getting cached data:", error)
-    return null
-  }
-}
-
-export async function cacheProducts(products: any[]): Promise<void> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning("Cliente Redis não disponível ao cachear produtos")
-      return
+    logger.error("Error saving video", { error })
+    if (fallback.isActive()) {
+      return fallback.saveVideo(videoData)
     }
-
-    if (!Array.isArray(products)) {
-      logger.error("Produtos não é um array:", typeof products)
-      return
-    }
-
-    // Verificar produtos excluídos antes de cachear
-    const excludedProducts = await getExcludedProducts()
-
-    // Filtrar produtos que não estão na lista de excluídos
-    const filteredProducts = products.filter((product) => !excludedProducts.includes(product.itemId))
-
-    // Make sure we're storing a string in Redis
-    const productsString = JSON.stringify(filteredProducts)
-
-    // Cache the full product list
-    await redis.set(CACHE_KEYS.PRODUCTS, productsString, { ex: CACHE_TTL.PRODUCTS })
-
-    // Also cache individual products for faster access
-    for (const product of filteredProducts) {
-      await redis.set(`${CACHE_KEYS.PRODUCT_PREFIX}${product.itemId}`, JSON.stringify(product), {
-        ex: CACHE_TTL.PRODUCTS,
-      })
-    }
-
-    logger.info(`Cached ${filteredProducts.length} products for ${CACHE_TTL.PRODUCTS} seconds`)
-  } catch (error) {
-    logger.error("Error caching products:", error)
-    // Continue execution even if caching fails
-  }
-}
-
-export async function addProcessedId(productId: string): Promise<void> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao adicionar ID processado ${productId}`)
-      return
-    }
-
-    await redis.sadd(CACHE_KEYS.PROCESSED_IDS, productId)
-    // Set expiration if the set is newly created
-    const ttl = await redis.ttl(CACHE_KEYS.PROCESSED_IDS)
-    if (ttl < 0) {
-      await redis.expire(CACHE_KEYS.PROCESSED_IDS, CACHE_TTL.PROCESSED_IDS)
-    }
-  } catch (error) {
-    logger.error(`Error adding processed ID ${productId}:`, error)
+    return false
   }
 }
 
 export async function isIdProcessed(productId: string): Promise<boolean> {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao verificar se ID ${productId} foi processado`)
+      if (fallback.isActive()) {
+        return fallback.isIdProcessed(productId)
+      }
       return false
     }
-
-    return (await redis.sismember(CACHE_KEYS.PROCESSED_IDS, productId)) === 1
+    const processed = await redis.sismember(CACHE_KEYS.PROCESSED_IDS, productId)
+    return processed === 1
   } catch (error) {
-    logger.error(`Error checking if ID ${productId} is processed:`, error)
+    logger.error("Error checking if ID is processed", { error })
+    if (fallback.isActive()) {
+      return fallback.isIdProcessed(productId)
+    }
     return false
   }
 }
 
-/**
- * Adiciona um produto à lista de excluídos
- * Produtos excluídos não serão mais buscados na API ou exibidos nas listas
- */
-export async function addExcludedProduct(productId: string): Promise<void> {
+export async function addProcessedId(productId: string) {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao adicionar produto ${productId} à lista de excluídos`)
-      return
-    }
-
-    await redis.sadd(CACHE_KEYS.EXCLUDED_PRODUCTS, productId)
-
-    // Definir TTL se o conjunto for recém-criado
-    const ttl = await redis.ttl(CACHE_KEYS.EXCLUDED_PRODUCTS)
-    if (ttl < 0) {
-      await redis.expire(CACHE_KEYS.EXCLUDED_PRODUCTS, CACHE_TTL.EXCLUDED_PRODUCTS)
-    }
-
-    // Remover o produto do cache de produtos
-    await redis.del(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
-
-    // Remover o produto da lista de produtos
-    const products = await getCachedProducts()
-    if (products && Array.isArray(products)) {
-      const updatedProducts = products.filter((p) => p.itemId !== productId)
-      await redis.set(CACHE_KEYS.PRODUCTS, JSON.stringify(updatedProducts), { ex: CACHE_TTL.PRODUCTS })
-    }
-
-    logger.info(`Produto ${productId} adicionado à lista de excluídos`)
-  } catch (error) {
-    logger.error(`Erro ao adicionar produto ${productId} à lista de excluídos:`, error)
-  }
-}
-
-/**
- * Verifica se um produto está na lista de excluídos
- */
-export async function isProductExcluded(productId: string): Promise<boolean> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao verificar se produto ${productId} está excluído`)
+      if (fallback.isActive()) {
+        return fallback.addProcessedId(productId)
+      }
       return false
     }
-
-    return (await redis.sismember(CACHE_KEYS.EXCLUDED_PRODUCTS, productId)) === 1
+    await redis.sadd(CACHE_KEYS.PROCESSED_IDS, productId)
+    return true
   } catch (error) {
-    logger.error(`Erro ao verificar se o produto ${productId} está excluído:`, error)
+    logger.error("Error adding processed ID", { error })
+    if (fallback.isActive()) {
+      return fallback.addProcessedId(productId)
+    }
     return false
   }
 }
 
-/**
- * Obtém a lista de produtos excluídos
- */
 export async function getExcludedProducts(): Promise<string[]> {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter produtos excluídos")
+      if (fallback.isActive()) {
+        return fallback.getExcludedProducts()
+      }
       return []
     }
-
-    return await redis.smembers(CACHE_KEYS.EXCLUDED_PRODUCTS)
+    const excluded = await redis.smembers(CACHE_KEYS.EXCLUDED_PRODUCTS)
+    return excluded as string[]
   } catch (error) {
-    logger.error("Erro ao obter produtos excluídos:", error)
+    logger.error("Error getting excluded products", { error })
+    if (fallback.isActive()) {
+      return fallback.getExcludedProducts()
+    }
     return []
   }
 }
 
-/**
- * Salva um card gerado no Redis
- */
-export async function saveCard(cardData: any): Promise<void> {
+export async function cacheProducts(products: any[], expirationInSeconds = 3600) {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao salvar card")
-      return
-    }
-
-    const { productId } = cardData
-
-    if (!productId) {
-      throw new Error("ID do produto é obrigatório para salvar o card")
-    }
-
-    // Garantir que estamos salvando uma string JSON
-    const cardDataString = typeof cardData === "string" ? cardData : JSON.stringify(cardData)
-
-    // Adicionar ID do card ao conjunto de cards
-    await redis.sadd(CACHE_KEYS.CARDS, productId)
-
-    // Definir TTL se o conjunto for recém-criado
-    const ttl = await redis.ttl(CACHE_KEYS.CARDS)
-    if (ttl < 0) {
-      await redis.expire(CACHE_KEYS.CARDS, CACHE_TTL.CARDS)
-    }
-
-    // Salvar dados do card
-    await redis.set(`${CACHE_KEYS.CARD_PREFIX}${productId}`, cardDataString, {
-      ex: CACHE_TTL.CARDS,
-    })
-
-    // Adicionar o produto à lista de excluídos
-    await addExcludedProduct(productId)
-
-    logger.info(`Card para o produto ${productId} salvo com sucesso`)
-  } catch (error) {
-    logger.error("Erro ao salvar card:", error)
-    throw error
-  }
-}
-
-/**
- * Obtém todos os cards gerados
- */
-export async function getCards(): Promise<any[]> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter cards")
-      return []
-    }
-
-    const cardIds = await redis.smembers(CACHE_KEYS.CARDS)
-
-    if (!cardIds || cardIds.length === 0) {
-      return []
-    }
-
-    const cards = []
-    for (const cardId of cardIds) {
-      try {
-        const cardData = await redis.get(`${CACHE_KEYS.CARD_PREFIX}${cardId}`)
-        if (cardData) {
-          // Garantir que estamos lidando com uma string antes de fazer o parse
-          if (typeof cardData === "string") {
-            try {
-              cards.push(JSON.parse(cardData))
-            } catch (parseError) {
-              logger.error(`Erro ao analisar dados do card ${cardId}:`, parseError)
-              // Tentar usar os dados brutos se o parse falhar
-              cards.push({ productId: cardId, error: "Erro ao analisar dados", rawData: cardData })
-            }
-          } else if (typeof cardData === "object") {
-            // Se já for um objeto, usar diretamente
-            cards.push(cardData)
-          }
-        }
-      } catch (error) {
-        logger.error(`Erro ao obter card ${cardId}:`, error)
+      if (fallback.isActive()) {
+        return fallback.cacheProducts(products)
       }
+      return false
     }
-
-    return cards
+    await redis.setex(CACHE_KEYS.PRODUCTS, expirationInSeconds, JSON.stringify(products))
+    return true
   } catch (error) {
-    logger.error("Erro ao obter cards:", error)
-    return []
+    logger.error("Error caching products", { error })
+    if (fallback.isActive()) {
+      return fallback.cacheProducts(products)
+    }
+    return false
   }
 }
 
-/**
- * Publica um card (move da lista de cards para a lista de publicados)
- */
-export async function publishCard(productId: string): Promise<void> {
+export async function getCachedProducts(): Promise<any[] | null> {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao publicar card ${productId}`)
-      return
-    }
-
-    // Verificar se o card existe
-    const cardData = await redis.get(`${CACHE_KEYS.CARD_PREFIX}${productId}`)
-    if (!cardData) {
-      throw new Error(`Card para o produto ${productId} não encontrado`)
-    }
-
-    // Adicionar à lista de cards publicados
-    await redis.sadd(CACHE_KEYS.PUBLISHED_CARDS, productId)
-
-    // Definir TTL se o conjunto for recém-criado
-    const ttl = await redis.ttl(CACHE_KEYS.PUBLISHED_CARDS)
-    if (ttl < 0) {
-      await redis.expire(CACHE_KEYS.PUBLISHED_CARDS, CACHE_TTL.PUBLISHED_CARDS)
-    }
-
-    // Remover da lista de cards não publicados
-    await redis.srem(CACHE_KEYS.CARDS, productId)
-
-    // Atualizar os dados do card com a data de publicação
-    let cardObj
-    if (typeof cardData === "string") {
-      try {
-        cardObj = JSON.parse(cardData)
-      } catch (error) {
-        logger.error(`Erro ao analisar dados do card ${productId}:`, error)
-        // Criar um objeto básico se o parse falhar
-        cardObj = { productId, error: "Erro ao analisar dados" }
+      if (fallback.isActive()) {
+        return fallback.getCachedProducts()
       }
-    } else {
-      cardObj = cardData
+      return null
     }
-
-    cardObj.publishedAt = new Date().toISOString()
-
-    // Salvar os dados atualizados
-    await redis.set(`${CACHE_KEYS.CARD_PREFIX}${productId}`, JSON.stringify(cardObj), {
-      ex: CACHE_TTL.PUBLISHED_CARDS,
-    })
-
-    logger.info(`Card para o produto ${productId} publicado com sucesso`)
+    const data = await redis.get(CACHE_KEYS.PRODUCTS)
+    return data ? (typeof data === "string" ? JSON.parse(data) : data) : null
   } catch (error) {
-    logger.error(`Erro ao publicar card ${productId}:`, error)
-    throw error
+    logger.error("Error getting cached products", { error })
+    if (fallback.isActive()) {
+      return fallback.getCachedProducts()
+    }
+    return null
   }
 }
 
-/**
- * Obtém todos os cards publicados
- */
-export async function getPublishedCards(): Promise<any[]> {
+export async function cacheDescription(productId: string, description: string, expirationInSeconds = 3600) {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter cards publicados")
-      return []
-    }
-
-    const cardIds = await redis.smembers(CACHE_KEYS.PUBLISHED_CARDS)
-
-    if (!cardIds || cardIds.length === 0) {
-      return []
-    }
-
-    const cards = []
-    for (const cardId of cardIds) {
-      try {
-        const cardData = await redis.get(`${CACHE_KEYS.CARD_PREFIX}${cardId}`)
-        if (cardData) {
-          // Garantir que estamos lidando com uma string antes de fazer o parse
-          if (typeof cardData === "string") {
-            try {
-              cards.push(JSON.parse(cardData))
-            } catch (parseError) {
-              logger.error(`Erro ao analisar dados do card publicado ${cardId}:`, parseError)
-              // Tentar usar os dados brutos se o parse falhar
-              cards.push({ productId: cardId, error: "Erro ao analisar dados", rawData: cardData })
-            }
-          } else if (typeof cardData === "object") {
-            // Se já for um objeto, usar diretamente
-            cards.push(cardData)
-          }
-        }
-      } catch (error) {
-        logger.error(`Erro ao obter card publicado ${cardId}:`, error)
+      if (fallback.isActive()) {
+        return fallback.cacheDescription(productId, description)
       }
+      return false
     }
-
-    return cards
+    await redis.setex(`shopee:description:${productId}`, expirationInSeconds, description)
+    return true
   } catch (error) {
-    logger.error("Erro ao obter cards publicados:", error)
-    return []
+    logger.error("Error caching description", { error })
+    if (fallback.isActive()) {
+      return fallback.cacheDescription(productId, description)
+    }
+    return false
   }
 }
 
-export async function cleanupCache(): Promise<void> {
-  // Redis automatically removes expired keys, but we might want to manually clean up some data
-  logger.info("Running cache cleanup...")
-
+export async function getCachedDescription(productId: string): Promise<string | null> {
   try {
-    // We could implement additional cleanup logic here if needed
-    logger.info("Cache cleanup completed")
-  } catch (error) {
-    logger.error("Error during cache cleanup:", error)
-  }
-}
-
-/**
- * Salva um vídeo gerado no Redis
- */
-export async function saveVideo(videoData: any): Promise<void> {
-  try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao salvar vídeo")
-      return
-    }
-
-    const { productId } = videoData
-
-    if (!productId) {
-      throw new Error("ID do produto é obrigatório para salvar o vídeo")
-    }
-
-    // Garantir que estamos salvando uma string JSON
-    const videoDataString = typeof videoData === "string" ? videoData : JSON.stringify(videoData)
-
-    // Adicionar ID do vídeo ao conjunto de vídeos
-    await redis.sadd("shopee:videos", productId)
-
-    // Definir TTL se o conjunto for recém-criado
-    const ttl = await redis.ttl("shopee:videos")
-    if (ttl < 0) {
-      await redis.expire("shopee:videos", CACHE_TTL.CARDS) // Usando o mesmo TTL dos cards
-    }
-
-    // Salvar dados do vídeo
-    await redis.set(`shopee:video:${productId}`, videoDataString, {
-      ex: CACHE_TTL.CARDS,
-    })
-
-    logger.info(`Vídeo para o produto ${productId} salvo com sucesso`)
-  } catch (error) {
-    logger.error("Erro ao salvar vídeo:", error)
-    throw error
-  }
-}
-
-/**
- * Obtém todos os vídeos gerados
- */
-export async function getVideos(): Promise<any[]> {
-  try {
-    const redis = getRedisClient()
-    if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter vídeos")
-      return []
-    }
-
-    const videoIds = await redis.smembers("shopee:videos")
-
-    if (!videoIds || videoIds.length === 0) {
-      return []
-    }
-
-    const videos = []
-    for (const videoId of videoIds) {
-      try {
-        const videoData = await redis.get(`shopee:video:${videoId}`)
-        if (videoData) {
-          // Garantir que estamos lidando com uma string antes de fazer o parse
-          if (typeof videoData === "string") {
-            try {
-              videos.push(JSON.parse(videoData))
-            } catch (parseError) {
-              logger.error(`Erro ao analisar dados do vídeo ${videoId}:`, parseError)
-              // Tentar usar os dados brutos se o parse falhar
-              videos.push({ productId: videoId, error: "Erro ao analisar dados", rawData: videoData })
-            }
-          } else if (typeof videoData === "object") {
-            // Se já for um objeto, usar diretamente
-            videos.push(videoData)
-          }
-        }
-      } catch (error) {
-        logger.error(`Erro ao obter vídeo ${videoId}:`, error)
+      if (fallback.isActive()) {
+        return fallback.getCachedDescription(productId)
       }
+      return null
     }
-
-    return videos
+    const data = await redis.get(`shopee:description:${productId}`)
+    return data ? (data as string) : null
   } catch (error) {
-    logger.error("Erro ao obter vídeos:", error)
-    return []
+    logger.error("Error getting cached description", { error })
+    if (fallback.isActive()) {
+      return fallback.getCachedDescription(productId)
+    }
+    return null
   }
 }
 
-/**
- * Publica um vídeo (move da lista de vídeos para a lista de publicados)
- */
-export async function publishVideo(productId: string): Promise<void> {
+export async function cleanupCache() {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning(`Cliente Redis não disponível ao publicar vídeo ${productId}`)
-      return
-    }
-
-    // Verificar se o vídeo existe
-    const videoData = await redis.get(`shopee:video:${productId}`)
-    if (!videoData) {
-      throw new Error(`Vídeo para o produto ${productId} não encontrado`)
-    }
-
-    // Adicionar à lista de vídeos publicados
-    await redis.sadd("shopee:published_videos", productId)
-
-    // Definir TTL se o conjunto for recém-criado
-    const ttl = await redis.ttl("shopee:published_videos")
-    if (ttl < 0) {
-      await redis.expire("shopee:published_videos", CACHE_TTL.PUBLISHED_CARDS)
-    }
-
-    // Remover da lista de vídeos não publicados
-    await redis.srem("shopee:videos", productId)
-
-    // Atualizar os dados do vídeo com a data de publicação
-    let videoObj
-    if (typeof videoData === "string") {
-      try {
-        videoObj = JSON.parse(videoData)
-      } catch (error) {
-        logger.error(`Erro ao analisar dados do vídeo ${productId}:`, error)
-        // Criar um objeto básico se o parse falhar
-        videoObj = { productId, error: "Erro ao analisar dados" }
+      if (fallback.isActive()) {
+        return fallback.cleanupCache()
       }
-    } else {
-      videoObj = videoData
+      return false
     }
+    // Delete products
+    await redis.del(CACHE_KEYS.PRODUCTS)
 
-    videoObj.publishedAt = new Date().toISOString()
+    // Delete processed IDs
+    await redis.del(CACHE_KEYS.PROCESSED_IDS)
 
-    // Salvar os dados atualizados
-    await redis.set(`shopee:video:${productId}`, JSON.stringify(videoObj), {
-      ex: CACHE_TTL.PUBLISHED_CARDS,
-    })
-
-    logger.info(`Vídeo para o produto ${productId} publicado com sucesso`)
+    return true
   } catch (error) {
-    logger.error(`Erro ao publicar vídeo ${productId}:`, error)
-    throw error
+    logger.error("Error cleaning up cache", { error })
+    if (fallback.isActive()) {
+      return fallback.cleanupCache()
+    }
+    return false
   }
 }
 
-/**
- * Obtém todos os vídeos publicados
- */
-export async function getPublishedVideos(): Promise<any[]> {
+export async function getCachedProduct(productId: string): Promise<any | null> {
   try {
-    const redis = getRedisClient()
     if (!redis) {
-      logger.warning("Cliente Redis não disponível ao obter vídeos publicados")
-      return []
-    }
-
-    const videoIds = await redis.smembers("shopee:published_videos")
-
-    if (!videoIds || videoIds.length === 0) {
-      return []
-    }
-
-    const videos = []
-    for (const videoId of videoIds) {
-      try {
-        const videoData = await redis.get(`shopee:video:${videoId}`)
-        if (videoData) {
-          // Garantir que estamos lidando com uma string antes de fazer o parse
-          if (typeof videoData === "string") {
-            try {
-              videos.push(JSON.parse(videoData))
-            } catch (parseError) {
-              logger.error(`Erro ao analisar dados do vídeo publicado ${videoId}:`, parseError)
-              // Tentar usar os dados brutos se o parse falhar
-              videos.push({ productId: videoId, error: "Erro ao analisar dados", rawData: videoData })
-            }
-          } else if (typeof videoData === "object") {
-            // Se já for um objeto, usar diretamente
-            videos.push(videoData)
-          }
-        }
-      } catch (error) {
-        logger.error(`Erro ao obter vídeo publicado ${videoId}:`, error)
+      if (fallback.isActive()) {
+        return fallback.getCachedProduct(productId)
       }
+      return null
+    }
+    // Primeiro tente obter o produto diretamente pela chave individual
+    const product = await redis.get(`${CACHE_KEYS.PRODUCT_PREFIX}${productId}`)
+
+    if (product) {
+      return typeof product === "string" ? JSON.parse(product) : product
     }
 
-    return videos
+    // Se não encontrar, tente buscar na lista completa
+    const products = await getCachedProducts()
+    if (!products) return null
+
+    return products.find((p) => p.itemId === productId) || null
   } catch (error) {
-    logger.error("Erro ao obter vídeos publicados:", error)
-    return []
+    logger.error("Error getting cached product", { error })
+    if (fallback.isActive()) {
+      return fallback.getCachedProduct(productId)
+    }
+    return null
   }
 }
 
 // Exportar o cliente Redis para uso direto
-export const redis = getRedisClient()
+export { redis }
 export default redis

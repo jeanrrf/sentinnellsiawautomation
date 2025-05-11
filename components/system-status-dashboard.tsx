@@ -9,7 +9,17 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
-import { CheckCircle2, XCircle, AlertTriangle, RefreshCw, Database, Settings, Terminal, Info } from "lucide-react"
+import {
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  RefreshCw,
+  Database,
+  Settings,
+  Terminal,
+  Info,
+  Server,
+} from "lucide-react"
 
 export function SystemStatusDashboard() {
   const [status, setStatus] = useState<"loading" | "operational" | "warning" | "error">("loading")
@@ -19,6 +29,7 @@ export function SystemStatusDashboard() {
   const [testResults, setTestResults] = useState<any>(null)
   const [isRunningTest, setIsRunningTest] = useState(false)
   const [errorLogs, setErrorLogs] = useState<string[]>([])
+  const [lastCheckTime, setLastCheckTime] = useState<string | null>(null)
 
   const checkSystemStatus = async () => {
     setIsChecking(true)
@@ -26,7 +37,23 @@ export function SystemStatusDashboard() {
 
     try {
       console.info("[SystemStatus] Verificando status do sistema...")
-      const response = await fetch("/api/system-check")
+
+      // Adicionar timeout para evitar que a requisição fique pendente indefinidamente
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 segundos de timeout
+
+      const response = await fetch("/api/system-check", {
+        signal: controller.signal,
+        cache: "no-store",
+        next: { revalidate: 0 },
+      }).catch((error) => {
+        if (error.name === "AbortError") {
+          throw new Error("Timeout ao verificar status do sistema. A requisição demorou muito para responder.")
+        }
+        throw error
+      })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         throw new Error(`Erro HTTP: ${response.status} ${response.statusText}`)
@@ -50,11 +77,36 @@ export function SystemStatusDashboard() {
       }
 
       setDetails(data)
+      setLastCheckTime(new Date().toLocaleTimeString())
     } catch (error) {
       console.error("[SystemStatus] Erro ao verificar status do sistema:", error)
       setStatus("error")
-      setDetails({ error: error.message })
+      setDetails({
+        error: error.message,
+        fallback: true,
+        timestamp: new Date().toISOString(),
+        redis: { connected: false, info: "Não foi possível verificar" },
+        storage: { writable: false, info: "Não foi possível verificar" },
+        environment: {
+          node: process.env.NODE_ENV || "development",
+          platform: "browser",
+          arch: "unknown",
+          cpus: "unknown",
+          memory: "unknown",
+        },
+        resources: {
+          memoryUsage: "N/A",
+          memoryPercentage: 0,
+          elapsedTime: "N/A",
+          timePercentage: 0,
+        },
+        config: {
+          nodeEnv: process.env.NODE_ENV || "development",
+          vercel: process.env.VERCEL === "1" ? "Sim" : "Não",
+        },
+      })
       setErrorLogs((prev) => [...prev, `ERRO: ${error.message}`])
+      setLastCheckTime(new Date().toLocaleTimeString())
     } finally {
       setIsChecking(false)
     }
@@ -76,6 +128,8 @@ export function SystemStatusDashboard() {
 
       const response = await fetch(`/api/test-component?component=${component}`, {
         signal: controller.signal,
+        cache: "no-store",
+        next: { revalidate: 0 },
       }).catch((error) => {
         if (error.name === "AbortError") {
           throw new Error("Timeout ao testar componente. A requisição demorou muito para responder.")
@@ -157,7 +211,9 @@ export function SystemStatusDashboard() {
       color: "bg-red-100 text-red-800",
       icon: <XCircle className="h-5 w-5 text-red-600" />,
       title: "Erro",
-      description: "Ocorreu um problema ao verificar o status do sistema.",
+      description: details?.fallback
+        ? "Não foi possível conectar ao serviço de verificação de status."
+        : "Ocorreu um problema ao verificar o status do sistema.",
     },
   }
 
@@ -171,7 +227,10 @@ export function SystemStatusDashboard() {
             {currentStatus.icon}
             Status do Sistema
           </CardTitle>
-          <CardDescription>Verificação dos componentes</CardDescription>
+          <CardDescription>
+            Verificação dos componentes
+            {lastCheckTime && <span className="ml-2 text-xs text-gray-500">Última verificação: {lastCheckTime}</span>}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Alert className={`${currentStatus.color} border-0`}>
@@ -190,6 +249,11 @@ export function SystemStatusDashboard() {
                 title="Armazenamento"
                 status={details?.storage?.writable ? "operational" : "error"}
                 icon={<Terminal className="h-4 w-4" />}
+              />
+              <StatusCard
+                title="API"
+                status={details?.fallback ? "error" : "operational"}
+                icon={<Server className="h-4 w-4" />}
               />
             </div>
           )}

@@ -7,6 +7,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Download, RefreshCw, AlertTriangle, CheckCircle, Info } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 
 export function OneClickGenerator() {
   const [isLoading, setIsLoading] = useState(false)
@@ -15,13 +17,14 @@ export function OneClickGenerator() {
   const [success, setSuccess] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const { toast } = useToast()
+  const [productCount, setProductCount] = useState(1) // Default to 1 product
 
   const handleOneClickGenerate = () => {
     setIsLoading(true)
     setProgress(0)
     setError(null)
     setSuccess(null)
-    setInfo("Iniciando geração de cards...")
+    setInfo("Iniciando busca de produtos em alta na API da Shopee...")
 
     // Simulate progress
     const interval = setInterval(() => {
@@ -34,64 +37,43 @@ export function OneClickGenerator() {
       })
     }, 200)
 
-    // Check if Redis is available first
-    fetch("/api/system-check")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.redis) {
-          setInfo("Redis não está disponível. Usando dados de exemplo...")
-        }
+    // Open the auto-download endpoint in a new tab
+    const newTab = window.open(`/api/auto-download?count=${productCount}`, "_blank")
 
-        // Open the auto-download endpoint in a new tab
-        const newTab = window.open("/api/auto-download", "_blank")
+    // Check if the tab was opened successfully
+    if (!newTab) {
+      clearInterval(interval)
+      setIsLoading(false)
+      setError("O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.")
 
-        // Check if the tab was opened successfully
-        if (!newTab) {
-          clearInterval(interval)
-          setIsLoading(false)
-          setError("O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.")
-
-          toast({
-            variant: "destructive",
-            title: "Erro ao abrir nova aba",
-            description: "O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.",
-          })
-          return
-        }
-
-        // Complete the progress after a delay
-        setTimeout(() => {
-          clearInterval(interval)
-          setProgress(100)
-          setIsLoading(false)
-          setSuccess("Geração iniciada em uma nova aba!")
-          setInfo(null)
-
-          toast({
-            title: "Geração iniciada",
-            description: "A geração e download dos cards foi iniciada em uma nova aba.",
-          })
-        }, 2000)
+      toast({
+        variant: "destructive",
+        title: "Erro ao abrir nova aba",
+        description: "O navegador bloqueou a abertura da nova aba. Por favor, permita pop-ups para este site.",
       })
-      .catch((err) => {
-        clearInterval(interval)
-        setIsLoading(false)
-        setError(`Erro ao verificar o sistema: ${err.message}`)
-        setInfo(null)
+      return
+    }
 
-        toast({
-          variant: "destructive",
-          title: "Erro ao verificar o sistema",
-          description: `Não foi possível verificar o status do sistema: ${err.message}`,
-        })
+    // Complete the progress after a delay
+    setTimeout(() => {
+      clearInterval(interval)
+      setProgress(100)
+      setIsLoading(false)
+      setSuccess("Geração iniciada em uma nova aba!")
+      setInfo(null)
+
+      toast({
+        title: "Geração iniciada",
+        description: "A geração e download dos cards foi iniciada em uma nova aba.",
       })
+    }, 2000)
   }
 
   return (
     <Card className="w-full">
       <CardHeader>
         <CardTitle>Geração com Um Clique</CardTitle>
-        <CardDescription>Gere e baixe cards de produtos automaticamente com apenas um clique</CardDescription>
+        <CardDescription>Gere e baixe cards de produtos em alta automaticamente com apenas um clique</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -129,14 +111,26 @@ export function OneClickGenerator() {
           </div>
         )}
 
+        <div className="mb-4">
+          <Label htmlFor="productCount">Número de Produtos:</Label>
+          <Input
+            id="productCount"
+            type="number"
+            min="1"
+            value={productCount}
+            onChange={(e) => setProductCount(Number.parseInt(e.target.value))}
+            disabled={isLoading}
+          />
+        </div>
+
         <div className="p-4 bg-blue-50 border border-blue-100 rounded-md">
           <h3 className="font-medium text-blue-800 mb-2">O que isso faz?</h3>
           <ul className="list-disc pl-5 space-y-1 text-blue-700 text-sm">
-            <li>Seleciona automaticamente um produto do cache (ou usa um exemplo se não houver produtos)</li>
+            <li>Conecta diretamente à API da Shopee para buscar produtos em alta</li>
+            <li>Utiliza nosso algoritmo avançado para selecionar os melhores produtos</li>
             <li>Gera cards usando o template moderno e o template Agemini</li>
             <li>Cria um arquivo de texto com informações do produto</li>
             <li>Empacota tudo em um arquivo ZIP para download</li>
-            <li>Executa todo o processo com apenas um clique</li>
           </ul>
         </div>
       </CardContent>

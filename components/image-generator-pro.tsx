@@ -2,409 +2,309 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { ProductSelector } from "@/components/product-selector"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Badge } from "@/components/ui/badge"
-import { useToast } from "@/components/ui/use-toast"
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Sparkles, ImageIcon, Loader2, AlertTriangle, Edit, Smartphone } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { AlertCircle, Download, ImageIcon, Loader2, Save } from "lucide-react"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useToast } from "@/components/ui/use-toast"
+import { Progress } from "@/components/ui/progress"
 
-export function ImageGeneratorPro({ products = [] }) {
-  const [selectedProductId, setSelectedProductId] = useState("")
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [isGeneratingDescription, setIsGeneratingDescription] = useState(false)
-  const [generatedImage, setGeneratedImage] = useState(null)
-  const [generatedDescription, setGeneratedDescription] = useState("")
-  const [isEditingDescription, setIsEditingDescription] = useState(false)
-  const [editedDescription, setEditedDescription] = useState("")
-  const [descriptionError, setDescriptionError] = useState("")
-  const [template, setTemplate] = useState("default")
-  const [isDownloading, setIsDownloading] = useState(false)
-  const [error, setError] = useState("")
-  const [isFullscreen, setIsFullscreen] = useState(false)
+interface GeneratedImage {
+  id: string
+  url: string
+  prompt: string
+  timestamp: number
+}
+
+export function ImageGeneratorPro() {
   const { toast } = useToast()
+  const [prompt, setPrompt] = useState("")
+  const [negativePrompt, setNegativePrompt] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([])
+  const [selectedImage, setSelectedImage] = useState<GeneratedImage | null>(null)
+  const [aspectRatio, setAspectRatio] = useState("1:1")
+  const [quality, setQuality] = useState(75)
+  const [enhanceDetails, setEnhanceDetails] = useState(false)
+  const [style, setStyle] = useState("realistic")
+  const [error, setError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
-  // Get the selected product object based on the selected ID
-  const selectedProduct = selectedProductId ? products.find((p) => p.itemId === selectedProductId) : null
-
-  const templates = [
-    { id: "default", name: "Padrão", description: "Template padrão com foco no produto" },
-    { id: "promo", name: "Promoção", description: "Destaca o preço e promoções" },
-    { id: "features", name: "Características", description: "Foca nas características do produto" },
-  ]
-
-  const generateDescription = async () => {
-    if (!selectedProduct) {
-      toast({
-        title: "Nenhum produto selecionado",
-        description: "Por favor, selecione um produto para gerar a descrição.",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsGeneratingDescription(true)
-    setDescriptionError("")
-    setIsEditingDescription(false)
-
-    try {
-      // Create a fallback description based on product data
-      const price = Number.parseFloat(selectedProduct.price)
-      const sales = Number.parseInt(selectedProduct.sales || "0")
-      const rating = Number.parseFloat(selectedProduct.ratingStar || "4.5")
-
-      // Format numbers for better readability
-      const formattedSales = sales.toLocaleString("pt-BR")
-
-      // Create different templates based on product attributes
-      let description = ""
-
-      if (sales > 1000) {
-        // Popular product template
-        description = `🔥 SUPER OFERTA! 🔥\n\n${selectedProduct.productName}\n\n⭐ Avaliação: ${rating.toFixed(1)}/5\n💰 Apenas R$${price.toFixed(2)}\n🛒 Mais de ${formattedSales} clientes satisfeitos!\n\nProduto de alta qualidade com ótimo preço. Não perca esta oportunidade!\n\n#oferta #shopee #qualidade`
-      } else {
-        // New or less popular product template
-        description = `✨ DESCUBRA AGORA! ✨\n\n${selectedProduct.productName}\n\n⭐ Avaliação: ${rating.toFixed(1)}/5\n💰 Preço especial: R$${price.toFixed(2)}\n🛍️ Já vendido para ${formattedSales} clientes!\n\nProduto com excelente custo-benefício. Aproveite enquanto durar o estoque!\n\n#novidade #shopee #oferta`
-      }
-
-      setGeneratedDescription(description)
-      setEditedDescription(description)
-
-      toast({
-        title: "Descrição gerada com sucesso!",
-        description: "Uma descrição otimizada foi criada para o produto.",
-      })
-    } catch (error) {
-      console.error("Erro ao gerar descrição:", error)
-      setDescriptionError("Ocorreu um erro ao gerar a descrição. Por favor, tente novamente.")
-      toast({
-        title: "Erro ao gerar descrição",
-        description: "Ocorreu um erro ao gerar a descrição do produto.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsGeneratingDescription(false)
-    }
-  }
-
-  const toggleEditDescription = () => {
-    if (isEditingDescription) {
-      // Save the edited description
-      setGeneratedDescription(editedDescription)
-      setIsEditingDescription(false)
-      toast({
-        title: "Descrição atualizada",
-        description: "Suas alterações na descrição foram salvas.",
-      })
-    } else {
-      // Start editing
-      setIsEditingDescription(true)
-    }
-  }
-
+  // Simulated image generation
   const generateImage = async () => {
-    if (!selectedProduct) {
-      toast({
-        title: "Nenhum produto selecionado",
-        description: "Por favor, selecione um produto para gerar a imagem.",
-        variant: "destructive",
-      })
+    if (!prompt.trim()) {
+      setError("Por favor, insira uma descrição para gerar a imagem.")
       return
     }
 
+    setError(null)
     setIsGenerating(true)
-    setGeneratedImage(null)
-    setError("")
+    setProgress(0)
 
     try {
-      console.log("Generating image for product:", selectedProduct)
-
-      // Use the generated description if available, otherwise use a default one
-      const description =
-        generatedDescription ||
-        `${selectedProduct.productName} - Produto de alta qualidade com ótimo preço. Já vendido para mais de ${selectedProduct.sales} clientes satisfeitos!`
-
-      const response = await fetch("/api/generate-product-card", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          product: selectedProduct,
-          template: template,
-          description: description,
-        }),
-      })
-
-      const result = await response.json()
-
-      if (!response.ok) {
-        throw new Error(`Erro ao gerar imagem: ${result.error || result.details || response.statusText}`)
-      }
-
-      if (!result.success) {
-        throw new Error(`Erro ao gerar imagem: ${result.error || "Resposta inválida do servidor"}`)
-      }
-
-      if (result.html) {
-        setGeneratedImage(result)
-        toast({
-          title: "Imagem gerada com sucesso!",
-          description: "A imagem do produto foi gerada com sucesso.",
+      // Simulate progress
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          const newProgress = prev + Math.random() * 10
+          return newProgress >= 100 ? 100 : newProgress
         })
-      } else {
-        throw new Error("Resposta inválida do servidor: HTML não encontrado")
+      }, 500)
+
+      // Simulate API call delay
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+
+      clearInterval(progressInterval)
+      setProgress(100)
+
+      // Generate a random placeholder image
+      const dimensions = aspectRatio.split(":").map(Number)
+      const width = dimensions[0] * 100
+      const height = dimensions[1] * 100
+
+      const imageId = `img-${Date.now()}`
+      const imageUrl = `/placeholder.svg?height=${height}&width=${width}&query=${encodeURIComponent(prompt)}`
+
+      const newImage = {
+        id: imageId,
+        url: imageUrl,
+        prompt,
+        timestamp: Date.now(),
       }
-    } catch (error) {
-      console.error("Erro ao gerar imagem:", error)
-      setError(error.message || "Ocorreu um erro ao gerar a imagem do produto.")
+
+      setGeneratedImages((prev) => [newImage, ...prev])
+      setSelectedImage(newImage)
+
       toast({
-        title: "Erro ao gerar imagem",
-        description: error.message || "Ocorreu um erro ao gerar a imagem do produto.",
-        variant: "destructive",
+        title: "Imagem gerada com sucesso!",
+        description: "Sua imagem foi criada conforme solicitado.",
       })
+    } catch (err) {
+      setError("Ocorreu um erro ao gerar a imagem. Por favor, tente novamente.")
+      console.error("Error generating image:", err)
     } finally {
       setIsGenerating(false)
     }
   }
 
-  const downloadImage = async () => {
-    if (!generatedImage || !selectedProduct) return
+  const saveImage = async () => {
+    if (!selectedImage) return
 
-    setIsDownloading(true)
+    setIsSaving(true)
 
     try {
-      // Since we don't have HTML-to-image conversion anymore,
-      // we'll just download the product image as a fallback
-      const imageUrl = selectedProduct.imageUrl || "/placeholder.svg"
-      console.log("Downloading image from URL:", imageUrl)
-
-      const response = await fetch(imageUrl)
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.statusText}`)
-      }
-
-      const imageBlob = await response.blob()
-
-      // Create a filename for the image
-      const filename = `product-image-${selectedProduct.itemId}-${Date.now()}.png`
-
-      // Create a download link for the image
-      const url = URL.createObjectURL(imageBlob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = filename
-      document.body.appendChild(a)
-      a.click()
-
-      // Clean up
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      // Simulate saving delay
+      await new Promise((resolve) => setTimeout(resolve, 1500))
 
       toast({
-        title: "Download iniciado",
-        description: "O download da imagem foi iniciado.",
+        title: "Imagem salva!",
+        description: "A imagem foi salva com sucesso na sua biblioteca.",
       })
-    } catch (error) {
-      console.error("Erro ao baixar imagem:", error)
+    } catch (err) {
       toast({
-        title: "Erro ao baixar imagem",
-        description: error.message || "Ocorreu um erro ao baixar a imagem.",
+        title: "Erro ao salvar",
+        description: "Não foi possível salvar a imagem. Tente novamente.",
         variant: "destructive",
       })
     } finally {
-      setIsDownloading(false)
+      setIsSaving(false)
     }
   }
 
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen)
-  }
+  const downloadImage = () => {
+    if (!selectedImage) return
 
-  // If in fullscreen mode, show only the preview
-  if (isFullscreen && generatedImage) {
-    return (
-      <div className="fixed inset-0 bg-background z-50 flex flex-col">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h2 className="text-xl font-bold">Visualização TikTok (9:16)</h2>
-          <Button variant="outline" size="sm" onClick={toggleFullscreen}>
-            Sair da Visualização
-          </Button>
-        </div>
-        <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-auto">
-          <div className="relative h-full max-h-[80vh] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-xl">
-            <div className="absolute inset-0 overflow-auto" dangerouslySetInnerHTML={{ __html: generatedImage.html }} />
-          </div>
-        </div>
-      </div>
-    )
+    // In a real app, this would trigger a download
+    toast({
+      title: "Download iniciado",
+      description: "Sua imagem está sendo baixada.",
+    })
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-      <div className="lg:col-span-2">
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="text-2xl font-bold mb-4">Selecione um Produto</h2>
-            <ProductSelector products={products} value={selectedProductId} onChange={setSelectedProductId} />
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <Card className="lg:col-span-1">
+        <CardHeader>
+          <CardTitle>Configurações de Geração</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="prompt">Descrição da Imagem</Label>
+            <Textarea
+              id="prompt"
+              placeholder="Descreva a imagem que você deseja gerar..."
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="min-h-[100px]"
+            />
+          </div>
 
-            {selectedProduct && (
-              <div className="mt-6">
-                <Tabs defaultValue="template">
-                  <TabsList className="grid grid-cols-2 mb-4">
-                    <TabsTrigger value="template">
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      Template
-                    </TabsTrigger>
-                    <TabsTrigger value="description">
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Descrição
-                    </TabsTrigger>
-                  </TabsList>
+          <div className="space-y-2">
+            <Label htmlFor="negativePrompt">Elementos a Evitar (opcional)</Label>
+            <Textarea
+              id="negativePrompt"
+              placeholder="Elementos que você não quer na imagem..."
+              value={negativePrompt}
+              onChange={(e) => setNegativePrompt(e.target.value)}
+            />
+          </div>
 
-                  <TabsContent value="template">
-                    <h3 className="text-xl font-semibold mb-3">Escolha um Template</h3>
-                    <div className="grid grid-cols-1 gap-3">
-                      {templates.map((t) => (
-                        <div
-                          key={t.id}
-                          className={`border rounded-lg p-3 cursor-pointer transition-colors ${
-                            template === t.id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
-                          }`}
-                          onClick={() => setTemplate(t.id)}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium">{t.name}</span>
-                            {template === t.id && <Badge>Selecionado</Badge>}
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">{t.description}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </TabsContent>
+          <Tabs defaultValue="basic">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="basic">Básico</TabsTrigger>
+              <TabsTrigger value="advanced">Avançado</TabsTrigger>
+            </TabsList>
+            <TabsContent value="basic" className="space-y-4">
+              <div className="space-y-2">
+                <Label>Proporção</Label>
+                <Select value={aspectRatio} onValueChange={setAspectRatio}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1:1">Quadrado (1:1)</SelectItem>
+                    <SelectItem value="4:3">Paisagem (4:3)</SelectItem>
+                    <SelectItem value="3:4">Retrato (3:4)</SelectItem>
+                    <SelectItem value="16:9">Widescreen (16:9)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-                  <TabsContent value="description">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-xl font-semibold">Descrição do Produto</h3>
-                      {generatedDescription && !isEditingDescription && (
-                        <Button variant="outline" size="sm" onClick={toggleEditDescription}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Editar
-                        </Button>
-                      )}
-                      {isEditingDescription && (
-                        <Button variant="outline" size="sm" onClick={toggleEditDescription}>
-                          Salvar
-                        </Button>
-                      )}
-                    </div>
-                    <div className="border rounded-lg p-3 mb-3">
-                      {isGeneratingDescription ? (
-                        <div className="flex flex-col items-center justify-center py-4">
-                          <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                          <p className="text-sm text-muted-foreground">Gerando descrição...</p>
-                        </div>
-                      ) : descriptionError ? (
-                        <div className="flex flex-col items-center justify-center py-4 text-amber-600">
-                          <AlertTriangle className="h-8 w-8 mb-2" />
-                          <p className="text-sm text-center mb-2">{descriptionError}</p>
-                          <Button variant="outline" size="sm" onClick={generateDescription} className="mt-2">
-                            Tentar Novamente
-                          </Button>
-                        </div>
-                      ) : isEditingDescription ? (
-                        <textarea
-                          value={editedDescription}
-                          onChange={(e) => setEditedDescription(e.target.value)}
-                          className="w-full min-h-[150px] p-2 text-sm border rounded-md"
-                          placeholder="Edite a descrição do produto aqui..."
-                        />
-                      ) : generatedDescription ? (
-                        <div>
-                          <p className="text-sm whitespace-pre-line">{generatedDescription}</p>
-                          <Badge variant="outline" className="mt-2">
-                            Descrição Gerada
-                          </Badge>
-                        </div>
-                      ) : (
-                        <div className="text-center py-4">
-                          <p className="text-sm text-muted-foreground mb-2">
-                            Gere uma descrição otimizada para o produto.
-                          </p>
-                          <Button variant="outline" size="sm" onClick={generateDescription} className="mt-2">
-                            <Sparkles className="h-4 w-4 mr-2" />
-                            Gerar Descrição
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </TabsContent>
-                </Tabs>
+              <div className="space-y-2">
+                <Label>Estilo</Label>
+                <Select value={style} onValueChange={setStyle}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="realistic">Realista</SelectItem>
+                    <SelectItem value="cartoon">Cartoon</SelectItem>
+                    <SelectItem value="3d">3D Render</SelectItem>
+                    <SelectItem value="painting">Pintura</SelectItem>
+                    <SelectItem value="sketch">Esboço</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </TabsContent>
 
-                <Button className="w-full mt-6" onClick={generateImage} disabled={isGenerating}>
-                  {isGenerating ? "Gerando..." : "Gerar Imagem"}
-                </Button>
+            <TabsContent value="advanced" className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <Label>Qualidade</Label>
+                  <span className="text-sm text-muted-foreground">{quality}%</span>
+                </div>
+                <Slider value={[quality]} min={25} max={100} step={5} onValueChange={(value) => setQuality(value[0])} />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <Label htmlFor="enhance-details">Melhorar Detalhes</Label>
+                <Switch id="enhance-details" checked={enhanceDetails} onCheckedChange={setEnhanceDetails} />
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Erro</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          <Button onClick={generateImage} disabled={isGenerating || !prompt.trim()} className="w-full">
+            {isGenerating ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Gerando...
+              </>
+            ) : (
+              <>
+                <ImageIcon className="mr-2 h-4 w-4" />
+                Gerar Imagem
+              </>
+            )}
+          </Button>
+
+          {isGenerating && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Progresso</span>
+                <span>{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} />
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHeader>
+          <CardTitle>Visualização</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {selectedImage ? (
+            <div className="relative aspect-square w-full overflow-hidden rounded-lg border">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selectedImage.url || "/placeholder.svg"}
+                alt={selectedImage.prompt}
+                className="h-full w-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="flex aspect-square w-full items-center justify-center rounded-lg border bg-muted">
+              <p className="text-center text-muted-foreground">Gere uma imagem para visualizá-la aqui</p>
+            </div>
+          )}
+        </CardContent>
+        <CardFooter className="flex justify-between">
+          <Button variant="outline" onClick={saveImage} disabled={!selectedImage || isSaving}>
+            {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Salvar na Biblioteca
+          </Button>
+          <Button onClick={downloadImage} disabled={!selectedImage}>
+            <Download className="mr-2 h-4 w-4" />
+            Download
+          </Button>
+        </CardFooter>
+      </Card>
+
+      <Card className="lg:col-span-3">
+        <CardHeader>
+          <CardTitle>Histórico de Imagens</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {generatedImages.length > 0 ? (
+              generatedImages.map((image) => (
+                <div
+                  key={image.id}
+                  className={`relative aspect-square cursor-pointer overflow-hidden rounded-lg border ${
+                    selectedImage?.id === image.id ? "ring-2 ring-primary" : ""
+                  }`}
+                  onClick={() => setSelectedImage(image)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={image.url || "/placeholder.svg"}
+                    alt={image.prompt}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ))
+            ) : (
+              <div className="col-span-full flex h-32 items-center justify-center">
+                <p className="text-center text-muted-foreground">Nenhuma imagem gerada ainda</p>
               </div>
             )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="lg:col-span-3">
-        <Card className="h-full flex flex-col">
-          <CardContent className="p-6 flex-1 flex flex-col">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl font-bold">Visualização TikTok (9:16)</h2>
-              {generatedImage && (
-                <Button variant="outline" size="sm" onClick={toggleFullscreen}>
-                  <Smartphone className="h-4 w-4 mr-2" />
-                  Tela Cheia
-                </Button>
-              )}
-            </div>
-
-            <div className="flex-1 flex items-center justify-center bg-muted rounded-lg overflow-hidden">
-              {isGenerating ? (
-                <div className="h-full aspect-[9/16] bg-black rounded-lg flex items-center justify-center">
-                  <div className="space-y-3 w-3/4">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-5/6" />
-                    <Skeleton className="h-32 w-full" />
-                    <Skeleton className="h-8 w-4/6" />
-                    <Skeleton className="h-8 w-3/6" />
-                  </div>
-                </div>
-              ) : error ? (
-                <div className="h-full aspect-[9/16] bg-red-50 flex flex-col items-center justify-center p-4 text-red-600 border border-red-200 rounded-lg">
-                  <p className="font-semibold mb-2">Erro ao gerar imagem</p>
-                  <p className="text-sm text-center">{error}</p>
-                </div>
-              ) : generatedImage ? (
-                <div className="h-full max-h-[600px] aspect-[9/16] bg-black rounded-lg overflow-auto shadow-xl">
-                  <div className="h-full w-full" dangerouslySetInnerHTML={{ __html: generatedImage.html }} />
-                </div>
-              ) : (
-                <div className="h-full aspect-[9/16] bg-black rounded-lg flex items-center justify-center text-muted-foreground">
-                  <div className="text-center p-4">
-                    <Smartphone className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
-                    <p>Selecione um produto e gere uma imagem para visualizar</p>
-                    <p className="text-xs mt-2 text-muted-foreground/70">Formato TikTok 9:16</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {generatedImage && (
-              <div className="mt-4">
-                <Button className="w-full" onClick={downloadImage} disabled={isDownloading}>
-                  {isDownloading ? "Baixando..." : "Baixar Imagem"}
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server"
 import { createLogger } from "@/lib/logger"
 import { cacheProducts, isRedisAvailable, getCachedProducts, getExcludedProducts } from "@/lib/redis"
-// Remova a importação do crypto no topo do arquivo, pois usaremos o módulo nativo do Node.js
-// Remova ou comente: import crypto from "crypto"
 
 const logger = createLogger("ShopeeAPI")
 
@@ -12,7 +10,7 @@ const APP_ID = process.env.SHOPEE_APP_ID
 const APP_SECRET = process.env.SHOPEE_APP_SECRET
 
 // Limites e configurações
-const MAX_RESULTS_PER_PAGE = 50
+const MAX_RESULTS_PER_PAGE = 100 // Aumentado de 50 para 100
 const MAX_TOTAL_RESULTS = 200
 const CACHE_DURATION = 60 * 60 // 1 hora em segundos
 
@@ -29,9 +27,6 @@ export async function GET(request: Request) {
     const forceRefresh = url.searchParams.get("forceRefresh") === "true"
     const page = Number.parseInt(url.searchParams.get("page") || "1")
     const limit = Math.min(Number.parseInt(url.searchParams.get("limit") || "20"), MAX_RESULTS_PER_PAGE)
-
-    // Validação de parâmetros - Agora permitimos busca apenas por categoria sem palavra-chave
-    // Removemos a validação que exigia keyword ou category
 
     // Verificar cache primeiro (se não for forçada a atualização)
     if (!forceRefresh && (await isRedisAvailable())) {
@@ -206,7 +201,7 @@ export async function GET(request: Request) {
   }
 }
 
-// Substitua a função generateSignature com esta implementação corrigida:
+// Função corrigida para gerar assinatura usando Web Crypto API
 async function generateSignature(timestamp: number): Promise<string | null> {
   try {
     if (!APP_ID || !APP_SECRET) {
@@ -216,11 +211,21 @@ async function generateSignature(timestamp: number): Promise<string | null> {
 
     const message = `${APP_ID}${timestamp}`
 
-    // Usar o módulo crypto nativo do Node.js
-    const crypto = require("crypto")
-    const hmac = crypto.createHmac("sha256", APP_SECRET)
-    hmac.update(message)
-    return hmac.digest("hex")
+    // Converter a mensagem e a chave para ArrayBuffer
+    const encoder = new TextEncoder()
+    const messageBuffer = encoder.encode(message)
+    const keyBuffer = encoder.encode(APP_SECRET)
+
+    // Importar a chave para o formato adequado para HMAC
+    const key = await crypto.subtle.importKey("raw", keyBuffer, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
+
+    // Gerar a assinatura
+    const signatureBuffer = await crypto.subtle.sign("HMAC", key, messageBuffer)
+
+    // Converter o resultado para hexadecimal
+    return Array.from(new Uint8Array(signatureBuffer))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
   } catch (error) {
     logger.error("Erro ao gerar assinatura", { error })
     return null
