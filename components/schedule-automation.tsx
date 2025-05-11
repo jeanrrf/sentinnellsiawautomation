@@ -1,7 +1,5 @@
 "use client"
 
-import { Badge } from "@/components/ui/badge"
-
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,6 +15,7 @@ import { cn } from "@/lib/utils"
 import { useToast } from "@/components/ui/use-toast"
 import { TextGenerationSettings } from "@/components/text-generation-settings"
 import { CalendarIcon, Clock, Trash2, Plus, RefreshCw, Settings, Sparkles } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
 export function ScheduleAutomation() {
   const [activeTab, setActiveTab] = useState("schedules")
@@ -200,24 +199,12 @@ export function ScheduleAutomation() {
                         </CardDescription>
                       </div>
                       <div className="flex items-center space-x-2">
-                        {schedule.status === "pending" ? (
-                          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                            Pendente
-                          </Badge>
-                        ) : schedule.status === "completed" ? (
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                            Concluído
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                            Em Progresso
-                          </Badge>
-                        )}
+                        <Badge variant="outline">{schedule.status || "Pendente"}</Badge>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleScheduleDelete(schedule.id)}
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          className="h-8 w-8"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

@@ -10,7 +10,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
-import { TextTone } from "@/lib/text-generation-service"
 import { Sparkles, RefreshCw, Save, Wand2 } from "lucide-react"
 
 interface TextGenerationSettingsProps {
@@ -22,11 +21,11 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
   const [isLoading, setIsLoading] = useState(false)
   const [settings, setSettings] = useState({
     tone: {
-      [TextTone.YOUTHFUL]: true,
-      [TextTone.HUMOROUS]: true,
-      [TextTone.PERSUASIVE]: true,
-      [TextTone.PROFESSIONAL]: false,
-      [TextTone.CASUAL]: false,
+      youthful: true,
+      humorous: true,
+      persuasive: true,
+      professional: false,
+      casual: false,
     },
     maxLength: 300,
     includeEmojis: true,
@@ -53,21 +52,6 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
     setIsLoading(true)
 
     try {
-      // Preparar opções com base nas configurações
-      const tones = Object.entries(settings.tone)
-        .filter(([_, enabled]) => enabled)
-        .map(([tone]) => tone)
-
-      const options = {
-        tone: tones,
-        maxLength: settings.maxLength,
-        includeEmojis: settings.includeEmojis,
-        includeHashtags: settings.includeHashtags,
-        highlightDiscount: settings.highlightDiscount,
-        highlightFeatures: settings.highlightFeatures,
-        highlightUrgency: settings.highlightUrgency,
-      }
-
       // Produto de exemplo
       const exampleProduct = {
         itemId: "123456789",
@@ -88,7 +72,6 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
         },
         body: JSON.stringify({
           product: exampleProduct,
-          options,
         }),
       })
 
@@ -160,10 +143,8 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
                     </Label>
                     <Switch
                       id="tone-youthful"
-                      checked={settings.tone[TextTone.YOUTHFUL]}
-                      onCheckedChange={(checked) =>
-                        updateSettings({ tone: { ...settings.tone, [TextTone.YOUTHFUL]: checked } })
-                      }
+                      checked={settings.tone.youthful}
+                      onCheckedChange={(checked) => updateSettings({ tone: { ...settings.tone, youthful: checked } })}
                     />
                   </div>
 
@@ -176,10 +157,8 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
                     </Label>
                     <Switch
                       id="tone-humorous"
-                      checked={settings.tone[TextTone.HUMOROUS]}
-                      onCheckedChange={(checked) =>
-                        updateSettings({ tone: { ...settings.tone, [TextTone.HUMOROUS]: checked } })
-                      }
+                      checked={settings.tone.humorous}
+                      onCheckedChange={(checked) => updateSettings({ tone: { ...settings.tone, humorous: checked } })}
                     />
                   </div>
 
@@ -190,38 +169,8 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
                     </Label>
                     <Switch
                       id="tone-persuasive"
-                      checked={settings.tone[TextTone.PERSUASIVE]}
-                      onCheckedChange={(checked) =>
-                        updateSettings({ tone: { ...settings.tone, [TextTone.PERSUASIVE]: checked } })
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="tone-professional" className="flex flex-col space-y-1">
-                      <span>Profissional</span>
-                      <span className="font-normal text-xs text-muted-foreground">Tom mais formal e técnico</span>
-                    </Label>
-                    <Switch
-                      id="tone-professional"
-                      checked={settings.tone[TextTone.PROFESSIONAL]}
-                      onCheckedChange={(checked) =>
-                        updateSettings({ tone: { ...settings.tone, [TextTone.PROFESSIONAL]: checked } })
-                      }
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="tone-casual" className="flex flex-col space-y-1">
-                      <span>Casual</span>
-                      <span className="font-normal text-xs text-muted-foreground">Conversacional e natural</span>
-                    </Label>
-                    <Switch
-                      id="tone-casual"
-                      checked={settings.tone[TextTone.CASUAL]}
-                      onCheckedChange={(checked) =>
-                        updateSettings({ tone: { ...settings.tone, [TextTone.CASUAL]: checked } })
-                      }
+                      checked={settings.tone.persuasive}
+                      onCheckedChange={(checked) => updateSettings({ tone: { ...settings.tone, persuasive: checked } })}
                     />
                   </div>
                 </div>
@@ -267,42 +216,6 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
                       onCheckedChange={(checked) => updateSettings({ includeHashtags: checked })}
                     />
                   </div>
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="highlight-discount" className="flex flex-col space-y-1">
-                      <span>Destacar Desconto</span>
-                      <span className="font-normal text-xs text-muted-foreground">Enfatizar descontos e promoções</span>
-                    </Label>
-                    <Switch
-                      id="highlight-discount"
-                      checked={settings.highlightDiscount}
-                      onCheckedChange={(checked) => updateSettings({ highlightDiscount: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="highlight-features" className="flex flex-col space-y-1">
-                      <span>Destacar Características</span>
-                      <span className="font-normal text-xs text-muted-foreground">Enfatizar recursos do produto</span>
-                    </Label>
-                    <Switch
-                      id="highlight-features"
-                      checked={settings.highlightFeatures}
-                      onCheckedChange={(checked) => updateSettings({ highlightFeatures: checked })}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between space-x-2">
-                    <Label htmlFor="highlight-urgency" className="flex flex-col space-y-1">
-                      <span>Criar Urgência</span>
-                      <span className="font-normal text-xs text-muted-foreground">Adicionar senso de urgência</span>
-                    </Label>
-                    <Switch
-                      id="highlight-urgency"
-                      checked={settings.highlightUrgency}
-                      onCheckedChange={(checked) => updateSettings({ highlightUrgency: checked })}
-                    />
-                  </div>
                 </div>
               </div>
             </div>
@@ -333,17 +246,6 @@ export function TextGenerationSettings({ onSettingsChange }: TextGenerationSetti
                 placeholder="Clique em 'Gerar Exemplo' para ver como ficará o texto com suas configurações."
                 className="min-h-[200px]"
               />
-
-              <div className="p-4 bg-blue-50 border border-blue-100 rounded-md">
-                <h3 className="font-medium text-blue-800 mb-2">Dicas para textos eficazes:</h3>
-                <ul className="list-disc pl-5 space-y-1 text-blue-700 text-sm">
-                  <li>Combine diferentes tons para textos mais dinâmicos</li>
-                  <li>Use emojis com moderação para destacar pontos importantes</li>
-                  <li>Hashtags ajudam na descoberta do seu conteúdo</li>
-                  <li>Crie urgência para aumentar a taxa de conversão</li>
-                  <li>Destaque os benefícios, não apenas as características</li>
-                </ul>
-              </div>
             </div>
           </TabsContent>
         </Tabs>
