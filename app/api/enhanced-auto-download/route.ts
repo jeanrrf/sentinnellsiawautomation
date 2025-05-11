@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Gerar HTML para download page com todos os templates
-    const downloadPage = await generateEnhancedDownloadPage(selectedProduct, description, req.nextUrl.origin)
+    const downloadPage = generateEnhancedDownloadPage(selectedProduct, description, req.nextUrl.origin)
 
     // Retornar a página HTML
     return new NextResponse(downloadPage, {
@@ -93,7 +93,11 @@ export async function GET(req: NextRequest) {
   }
 }
 
-async function generateEnhancedDownloadPage(product: any, description: string, apiBaseUrl: string) {
+function generateEnhancedDownloadPage(product: any, description: string, apiBaseUrl: string) {
+  const productJson = JSON.stringify(product)
+  const descriptionJson = JSON.stringify(description)
+  const templatesJson = JSON.stringify(AVAILABLE_TEMPLATES)
+
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -237,10 +241,10 @@ async function generateEnhancedDownloadPage(product: any, description: string, a
   
   <script>
     // Dados do produto
-    const product = ${JSON.stringify(product)};
-    const description = ${JSON.stringify(description)};
+    const product = ${productJson};
+    const description = ${descriptionJson};
     const apiBaseUrl = "${apiBaseUrl}";
-    const templates = ${JSON.stringify(AVAILABLE_TEMPLATES)};
+    const templates = ${templatesJson};
     
     // Função para mostrar o status de progresso
     function updateStatus(percent, text) {
