@@ -101,8 +101,8 @@ async function generateEnhancedDownloadPage(product: any, description: string, a
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Download de Cards - ${product.productName}</title>
   <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"><\/script>
   <style>
     .card-preview {
       aspect-ratio: 9/16;
@@ -437,7 +437,7 @@ Link: \${product.offerLink || "N/A"}
     setTimeout(function() {
       downloadAllTemplates();
     }, 3000);
-  </script>
+  <\/script>
 </body>
 </html>`
 }
