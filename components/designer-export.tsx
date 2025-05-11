@@ -695,8 +695,8 @@ ${offerLink}
                           ) : (
                             <div
                               ref={previewContainerRef}
-                              className="w-full h-full overflow-hidden bg-white"
-                              style={{ minHeight: "200px" }}
+                              className="w-full h-full overflow-auto bg-white"
+                              style={{ minHeight: "200px", maxHeight: "100%" }}
                             />
                           )}
                         </div>
@@ -737,11 +737,10 @@ ${offerLink}
                         }}
                       >
                         {/* Exibir o card gerado */}
-                        <div className="w-full aspect-[9/16] relative" style={{ maxHeight: "320px" }}>
-                          <img
-                            src={cardUrl || "/placeholder.svg"}
-                            alt="Card gerado"
-                            className="w-full h-full object-contain"
+                        <div className="h-full max-h-[320px] aspect-[9/16] bg-black rounded-lg overflow-auto shadow-xl">
+                          <div
+                            className="w-full h-full overflow-auto"
+                            dangerouslySetInnerHTML={{ __html: htmlTemplate }}
                           />
                         </div>
                       </div>

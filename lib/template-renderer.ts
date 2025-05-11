@@ -38,7 +38,8 @@ export function renderBasicTemplate(product: any) {
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+      min-height: 100%;
+      height: auto;
     }
     .card {
       width: 90%;
@@ -157,7 +158,7 @@ export function renderProductCardTemplate(product: any, description: string, sty
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden;
+      overflow: auto;
     }
 
     body {
@@ -178,10 +179,11 @@ export function renderProductCardTemplate(product: any, description: string, sty
 
     .sm-card-container {
       width: 100%;
-      height: 100%;
+      height: auto;
+      min-height: 100%;
       aspect-ratio: 9/16;
       background: #000;
-      overflow: hidden;
+      overflow: auto;
       position: relative;
       display: flex;
       flex-direction: column;
@@ -262,7 +264,8 @@ export function renderProductCardTemplate(product: any, description: string, sty
     .sm-card {
       position: relative;
       width: 100%;
-      height: 100%;
+      height: auto;
+      min-height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -275,7 +278,8 @@ export function renderProductCardTemplate(product: any, description: string, sty
     /* Imagem do produto */
     .sm-product-image-container {
       width: 100%;
-      height: 45%;
+      height: auto;
+      max-height: 45%;
       margin: 10px 0;
       display: flex;
       justify-content: center;
@@ -287,7 +291,8 @@ export function renderProductCardTemplate(product: any, description: string, sty
 
     .sm-product-image {
       width: 100%;
-      height: 100%;
+      height: auto;
+      max-height: 100%;
       object-fit: contain;
       border-radius: 15px;
       box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
@@ -554,7 +559,7 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden;
+      overflow: auto;
     }
     
     body {
@@ -566,10 +571,11 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     
     .ap-container {
       width: 100%;
-      height: 100%;
+      height: auto;
+      min-height: 100%;
       aspect-ratio: 9/16;
       position: relative;
-      overflow: hidden;
+      overflow: auto;
       background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
     }
     
@@ -607,7 +613,8 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     .ap-content {
       position: relative;
       width: 100%;
-      height: 100%;
+      height: auto;
+      min-height: 100%;
       display: flex;
       flex-direction: column;
       padding: 70px 20px 20px;
@@ -615,7 +622,8 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
     
     .ap-product-image {
       width: 100%;
-      height: 40%;
+      height: auto;
+      max-height: 40%;
       object-fit: contain;
       border-radius: 10px;
       box-shadow: 0 5px 15px rgba(0,0,0,0.1);

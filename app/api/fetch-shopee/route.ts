@@ -1,142 +1,340 @@
 import { NextResponse } from "next/server"
-import crypto from "crypto"
-import { cacheProducts } from "@/lib/redis"
+import { createLogger } from "@/lib/logger"
+import { cacheProducts, isRedisAvailable, getCachedProducts, getExcludedProducts } from "@/lib/redis"
+// Remova a importação do crypto no topo do arquivo, pois usaremos o módulo nativo do Node.js
+// Remova ou comente: import crypto from "crypto"
 
-// Shopee API credentials from environment variables
-const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID
-const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET
-const SHOPEE_AFFILIATE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL
+const logger = createLogger("ShopeeAPI")
 
-function generateSignature(appId: string, timestamp: number, payload: string, secret: string) {
-  const baseString = `${appId}${timestamp}${payload}${secret}`
-  return crypto.createHash("sha256").update(baseString).digest("hex")
-}
+// Configurações da API
+const SHOPEE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL || "https://open-api.affiliate.shopee.com.br"
+const APP_ID = process.env.SHOPEE_APP_ID
+const APP_SECRET = process.env.SHOPEE_APP_SECRET
 
-export async function POST() {
+// Limites e configurações
+const MAX_RESULTS_PER_PAGE = 50
+const MAX_TOTAL_RESULTS = 200
+const CACHE_DURATION = 60 * 60 // 1 hora em segundos
+
+export async function GET(request: Request) {
   try {
-    if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET || !SHOPEE_AFFILIATE_API_URL) {
+    const url = new URL(request.url)
+    const keyword = url.searchParams.get("keyword") || ""
+    const category = url.searchParams.get("category") || ""
+    const minPrice = url.searchParams.get("minPrice") || ""
+    const maxPrice = url.searchParams.get("maxPrice") || ""
+    const minSales = Number.parseInt(url.searchParams.get("minSales") || "0")
+    const sortBy = url.searchParams.get("sortBy") || "sales"
+    const sortOrder = url.searchParams.get("sortOrder") || "desc"
+    const forceRefresh = url.searchParams.get("forceRefresh") === "true"
+    const page = Number.parseInt(url.searchParams.get("page") || "1")
+    const limit = Math.min(Number.parseInt(url.searchParams.get("limit") || "20"), MAX_RESULTS_PER_PAGE)
+
+    // Validação de parâmetros - Agora permitimos busca apenas por categoria sem palavra-chave
+    // Removemos a validação que exigia keyword ou category
+
+    // Verificar cache primeiro (se não for forçada a atualização)
+    if (!forceRefresh && (await isRedisAvailable())) {
+      logger.info("Verificando produtos em cache")
+      const cachedProducts = await getCachedProducts()
+
+      if (cachedProducts && Array.isArray(cachedProducts) && cachedProducts.length > 0) {
+        logger.info(`Encontrados ${cachedProducts.length} produtos em cache`)
+
+        // Aplicar filtros aos produtos em cache
+        const filteredProducts = filterProducts(cachedProducts, {
+          keyword,
+          category,
+          minPrice,
+          maxPrice,
+          minSales,
+        })
+
+        // Aplicar ordenação
+        const sortedProducts = sortProducts(filteredProducts, sortBy, sortOrder)
+
+        // Aplicar paginação
+        const paginatedProducts = paginateProducts(sortedProducts, page, limit)
+
+        return NextResponse.json({
+          success: true,
+          products: paginatedProducts,
+          total: filteredProducts.length,
+          page,
+          limit,
+          totalPages: Math.ceil(filteredProducts.length / limit),
+          source: "cache",
+        })
+      }
+    }
+
+    // Se não houver cache ou forceRefresh for true, buscar da API
+    logger.info("Buscando produtos da API da Shopee", { keyword, category, sortBy, sortOrder })
+
+    // Obter token de autenticação
+    const timestamp = Math.floor(Date.now() / 1000)
+    const signature = await generateSignature(timestamp)
+
+    if (!signature) {
       return NextResponse.json(
         {
           success: false,
-          message: "Missing Shopee API credentials. Please check your environment variables.",
+          message: "Falha ao gerar assinatura para autenticação",
         },
         { status: 500 },
       )
     }
 
-    const timestamp = Math.floor(Date.now() / 1000)
+    // Buscar produtos com paginação para evitar sobrecarga
+    const allProducts = []
+    let currentPage = 1
+    let hasMoreResults = true
+    let totalApiCalls = 0
+    const maxApiCalls = Math.ceil(MAX_TOTAL_RESULTS / MAX_RESULTS_PER_PAGE)
 
-    const query = `
-      query GetBestSellers($page: Int!, $limit: Int!, $sortType: Int) {
-        productOfferV2(page: $page, limit: $limit, sortType: $sortType) {
-          nodes {
-            itemId
-            productName
-            commissionRate
-            price
-            priceDiscountRate
-            priceMin
-            priceMax
-            sales
-            imageUrl
-            shopName
-            offerLink
-            ratingStar
-          }
+    while (hasMoreResults && totalApiCalls < maxApiCalls && allProducts.length < MAX_TOTAL_RESULTS) {
+      const apiUrl = new URL(`${SHOPEE_API_URL}/api/v1/search/item`)
+
+      // Parâmetros de busca
+      if (keyword) apiUrl.searchParams.append("keyword", keyword)
+      if (category) apiUrl.searchParams.append("category", category)
+      if (minPrice) apiUrl.searchParams.append("min_price", minPrice)
+      if (maxPrice) apiUrl.searchParams.append("max_price", maxPrice)
+      apiUrl.searchParams.append("page", currentPage.toString())
+      apiUrl.searchParams.append("page_size", MAX_RESULTS_PER_PAGE.toString())
+      apiUrl.searchParams.append("sort_by", mapSortField(sortBy))
+      apiUrl.searchParams.append("sort_direction", sortOrder === "desc" ? "DESC" : "ASC")
+
+      const response = await fetch(apiUrl.toString(), {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `SHA256 Credential=${APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
+        },
+        next: { revalidate: 0 },
+      })
+
+      if (!response.ok) {
+        logger.error("Erro na resposta da API da Shopee", {
+          status: response.status,
+          statusText: response.statusText,
+        })
+
+        // Se for o primeiro chamado e falhar, retornar erro
+        if (currentPage === 1) {
+          return NextResponse.json(
+            {
+              success: false,
+              message: `Erro ao buscar produtos: ${response.status} ${response.statusText}`,
+            },
+            { status: response.status },
+          )
+        } else {
+          // Se já temos alguns resultados, interromper e usar o que temos
+          hasMoreResults = false
+          break
         }
       }
-    `
 
-    // Limitando para 5 produtos e usando sortType 2 para best sellers
-    const variables = { page: 1, limit: 5, sortType: 2 }
-    const payload = JSON.stringify({ query, variables })
+      const data = await response.json()
 
-    const signature = generateSignature(SHOPEE_APP_ID, timestamp, payload, SHOPEE_APP_SECRET)
-
-    const headers = {
-      Authorization: `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
-      "Content-Type": "application/json",
-    }
-
-    console.log("Fetching from Shopee API with URL:", SHOPEE_AFFILIATE_API_URL)
-
-    const response = await fetch(SHOPEE_AFFILIATE_API_URL, {
-      method: "POST",
-      headers,
-      body: payload,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error("Shopee API error response:", errorText)
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: `Shopee API error: ${response.status} ${response.statusText}`,
-          details: errorText,
-        },
-        { status: response.status },
-      )
-    }
-
-    const data = await response.json()
-    console.log("Shopee API response:", JSON.stringify(data).substring(0, 200) + "...")
-
-    const products = data?.data?.productOfferV2?.nodes || []
-
-    if (!products || products.length === 0) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "No products returned from Shopee API",
-          apiResponse: data,
-        },
-        { status: 404 },
-      )
-    }
-
-    // Calcular o preço original com base na taxa de desconto
-    const processedProducts = products.map((product) => {
-      const price = Number.parseFloat(product.price)
-      const discountRate = Number.parseFloat(product.priceDiscountRate) / 100 // Convertendo para decimal
-
-      // Se tiver taxa de desconto, calcular o preço original
-      let originalPrice = null
-      if (discountRate > 0) {
-        // Fórmula: preço_atual = preço_original * (1 - taxa_desconto)
-        // Portanto: preço_original = preço_atual / (1 - taxa_desconto)
-        originalPrice = (price / (1 - discountRate)).toFixed(2)
+      if (!data.items || !Array.isArray(data.items)) {
+        logger.warning("Resposta da API não contém itens válidos", { data })
+        hasMoreResults = false
+        break
       }
 
-      return {
-        ...product,
-        calculatedOriginalPrice: originalPrice,
-      }
-    })
+      // Processar e formatar os produtos
+      const formattedProducts = data.items.map(formatShopeeProduct).filter(Boolean)
+      allProducts.push(...formattedProducts)
 
-    // Cache the products
-    try {
-      await cacheProducts(processedProducts)
-      console.log(`Cached ${processedProducts.length} products from Shopee API`)
-    } catch (cacheError) {
-      console.error("Error caching products from Shopee API:", cacheError)
+      // Verificar se há mais páginas
+      hasMoreResults = formattedProducts.length === MAX_RESULTS_PER_PAGE
+      currentPage++
+      totalApiCalls++
+
+      // Pequeno delay para evitar sobrecarga na API
+      if (hasMoreResults) {
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      }
     }
+
+    logger.info(`Busca concluída. Encontrados ${allProducts.length} produtos`)
+
+    // Filtrar produtos excluídos
+    const excludedProducts = await getExcludedProducts()
+    const filteredProducts = allProducts.filter((product) => !excludedProducts.includes(product.itemId))
+
+    // Salvar no cache se houver produtos e o Redis estiver disponível
+    if (filteredProducts.length > 0 && (await isRedisAvailable())) {
+      try {
+        await cacheProducts(filteredProducts)
+        logger.info(`${filteredProducts.length} produtos salvos no cache`)
+      } catch (cacheError) {
+        logger.error("Erro ao salvar produtos no cache", { error: cacheError })
+      }
+    }
+
+    // Aplicar filtros adicionais (minSales)
+    const finalFilteredProducts = filteredProducts.filter((product) => product.sales >= minSales)
+
+    // Aplicar ordenação final
+    const sortedProducts = sortProducts(finalFilteredProducts, sortBy, sortOrder)
+
+    // Aplicar paginação para a resposta
+    const startIndex = (page - 1) * limit
+    const paginatedProducts = sortedProducts.slice(startIndex, startIndex + limit)
 
     return NextResponse.json({
       success: true,
-      products: processedProducts,
-      cached: true,
-      timestamp: new Date().toISOString(),
+      products: paginatedProducts,
+      total: finalFilteredProducts.length,
+      page,
+      limit,
+      totalPages: Math.ceil(finalFilteredProducts.length / limit),
+      source: "api",
     })
   } catch (error: any) {
-    console.error("Error fetching from Shopee API:", error)
+    logger.error("Erro ao buscar produtos da Shopee", { error })
     return NextResponse.json(
       {
         success: false,
-        message: `Failed to fetch from Shopee API: ${error.message}`,
+        message: `Erro ao buscar produtos: ${error.message}`,
       },
       { status: 500 },
     )
+  }
+}
+
+// Substitua a função generateSignature com esta implementação corrigida:
+async function generateSignature(timestamp: number): Promise<string | null> {
+  try {
+    if (!APP_ID || !APP_SECRET) {
+      logger.error("Credenciais da API não configuradas")
+      return null
+    }
+
+    const message = `${APP_ID}${timestamp}`
+
+    // Usar o módulo crypto nativo do Node.js
+    const crypto = require("crypto")
+    const hmac = crypto.createHmac("sha256", APP_SECRET)
+    hmac.update(message)
+    return hmac.digest("hex")
+  } catch (error) {
+    logger.error("Erro ao gerar assinatura", { error })
+    return null
+  }
+}
+
+// Função para formatar produto da Shopee
+function formatShopeeProduct(item: any) {
+  try {
+    if (!item || !item.item_id) return null
+
+    return {
+      itemId: item.item_id.toString(),
+      productName: item.item_name || "Produto sem nome",
+      price: Number.parseFloat(item.price || 0).toFixed(2),
+      originalPrice: item.original_price ? Number.parseFloat(item.original_price).toFixed(2) : null,
+      discount: item.discount || 0,
+      sales: Number.parseInt(item.sales || "0"),
+      ratingStar: Number.parseFloat(item.rating_star || "0").toFixed(1),
+      imageUrl: item.image_url || null,
+      offerLink: item.offer_link || `https://shopee.com.br/product/${item.item_id}`,
+      shopId: item.shop_id?.toString() || null,
+      shopName: item.shop_name || "Loja desconhecida",
+      categoryId: item.category_id?.toString() || null,
+      categoryName: item.category_name || null,
+      updatedAt: new Date().toISOString(),
+    }
+  } catch (error) {
+    logger.error("Erro ao formatar produto", { error, item })
+    return null
+  }
+}
+
+// Função para filtrar produtos
+function filterProducts(products: any[], filters: any) {
+  return products.filter((product) => {
+    // Filtro por palavra-chave
+    if (filters.keyword && !product.productName.toLowerCase().includes(filters.keyword.toLowerCase())) {
+      return false
+    }
+
+    // Filtro por categoria
+    if (filters.category && product.categoryId !== filters.category) {
+      return false
+    }
+
+    // Filtro por preço mínimo
+    if (filters.minPrice && Number.parseFloat(product.price) < Number.parseFloat(filters.minPrice)) {
+      return false
+    }
+
+    // Filtro por preço máximo
+    if (filters.maxPrice && Number.parseFloat(product.price) > Number.parseFloat(filters.maxPrice)) {
+      return false
+    }
+
+    // Filtro por vendas mínimas
+    if (filters.minSales && product.sales < filters.minSales) {
+      return false
+    }
+
+    return true
+  })
+}
+
+// Função para ordenar produtos
+function sortProducts(products: any[], sortBy: string, sortOrder: string) {
+  return [...products].sort((a, b) => {
+    let valueA, valueB
+
+    switch (sortBy) {
+      case "price":
+        valueA = Number.parseFloat(a.price)
+        valueB = Number.parseFloat(b.price)
+        break
+      case "sales":
+        valueA = a.sales
+        valueB = b.sales
+        break
+      case "rating":
+        valueA = Number.parseFloat(a.ratingStar)
+        valueB = Number.parseFloat(b.ratingStar)
+        break
+      case "discount":
+        valueA = a.discount
+        valueB = b.discount
+        break
+      default:
+        valueA = a.sales
+        valueB = b.sales
+    }
+
+    return sortOrder === "desc" ? valueB - valueA : valueA - valueB
+  })
+}
+
+// Função para paginar produtos
+function paginateProducts(products: any[], page: number, limit: number) {
+  const startIndex = (page - 1) * limit
+  return products.slice(startIndex, startIndex + limit)
+}
+
+// Mapear campos de ordenação para os valores aceitos pela API
+function mapSortField(field: string): string {
+  switch (field) {
+    case "price":
+      return "price"
+    case "sales":
+      return "sales"
+    case "rating":
+      return "rating"
+    case "discount":
+      return "discount"
+    default:
+      return "sales"
   }
 }

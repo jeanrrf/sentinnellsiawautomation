@@ -232,8 +232,8 @@ export function ImageGeneratorPro({ products = [] }) {
             Sair da Visualização
           </Button>
         </div>
-        <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-hidden">
-          <div className="relative h-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-xl">
+        <div className="flex-1 flex items-center justify-center bg-muted p-4 overflow-auto">
+          <div className="relative h-full max-h-[80vh] aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-xl">
             <div className="absolute inset-0 overflow-auto" dangerouslySetInnerHTML={{ __html: generatedImage.html }} />
           </div>
         </div>
@@ -381,7 +381,7 @@ export function ImageGeneratorPro({ products = [] }) {
                   <p className="text-sm text-center">{error}</p>
                 </div>
               ) : generatedImage ? (
-                <div className="h-full aspect-[9/16] bg-black rounded-lg overflow-hidden shadow-xl">
+                <div className="h-full max-h-[600px] aspect-[9/16] bg-black rounded-lg overflow-auto shadow-xl">
                   <div className="h-full w-full" dangerouslySetInnerHTML={{ __html: generatedImage.html }} />
                 </div>
               ) : (
