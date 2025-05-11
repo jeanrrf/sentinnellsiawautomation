@@ -285,6 +285,71 @@ export class UnifiedCardService {
   }
 
   /**
+   * Obtém todos os agendamentos
+   */
+  async getSchedules(): Promise<any[]> {
+    try {
+      const redis = await getRedisClient()
+
+      if (!redis) {
+        logger.warn("Redis não disponível, retornando lista vazia de agendamentos")
+        return []
+      }
+
+      const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+      const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+
+      return schedules
+    } catch (error) {
+      logger.error("Erro ao obter agendamentos", { error })
+      return []
+    }
+  }
+
+  /**
+   * Cria ou atualiza um agendamento
+   */
+  async saveSchedule(schedule: any): Promise<boolean> {
+    try {
+      const redis = await getRedisClient()
+
+      if (!redis) {
+        logger.warn("Redis não disponível, agendamento não será salvo")
+        return false
+      }
+
+      // Garantir que o agendamento tenha um ID
+      if (!schedule.id) {
+        schedule.id = `schedule_${Date.now()}`
+      }
+
+      // Obter agendamentos existentes
+      const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+      const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+
+      // Verificar se é uma atualização ou novo agendamento
+      const existingIndex = schedules.findIndex((s: any) => s.id === schedule.id)
+
+      if (existingIndex >= 0) {
+        // Atualizar agendamento existente
+        schedules[existingIndex] = { ...schedules[existingIndex], ...schedule }
+      } else {
+        // Adicionar novo agendamento
+        schedules.push(schedule)
+      }
+
+      // Salvar agendamentos atualizados
+      await redis.set(REDIS_KEYS.schedules, JSON.stringify(schedules))
+
+      logger.info(`Agendamento ${schedule.id} salvo com sucesso`)
+      return true
+    } catch (error) {
+      logger.error("Erro ao salvar agendamento", { error })
+      return false
+    }
+  }
+
+  /**
    * Executa geração agendada
    */
   async executeScheduledGeneration(scheduleId: string): Promise<{ success: boolean; results: CardGenerationResult[] }> {
@@ -425,6 +490,95 @@ export class UnifiedCardService {
     } catch (error) {
       logger.error(`Erro ao atualizar status do agendamento ${scheduleId}`, { error })
     }
+  }
+
+  /**
+   * Exclui um agendamento
+   */
+  async deleteSchedule(scheduleId: string): Promise<boolean> {
+    try {
+      const redis = await getRedisClient()
+
+      if (!redis) {
+        logger.warn("Redis não disponível, agendamento não será excluído")
+        return false
+      }
+
+      // Obter agendamentos
+      const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+      const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+
+      // Filtrar agendamento a ser excluído
+      const updatedSchedules = schedules.filter((s: any) => s.id !== scheduleId)
+
+      // Salvar agendamentos atualizados
+      await redis.set(REDIS_KEYS.schedules, JSON.stringify(updatedSchedules))
+
+      logger.info(`Agendamento ${scheduleId} excluído com sucesso`)
+      return true
+    } catch (error) {
+      logger.error(`Erro ao excluir agendamento ${scheduleId}`, { error })
+      return false
+    }
+  }
+
+  /**
+   * Calcula a próxima execução de um agendamento
+   */
+  calculateNextRun(schedule: any): string {
+    const now = new Date()
+    const nextRun = new Date()
+
+    // Definir a hora
+    const [hours, minutes] = schedule.time.split(":").map(Number)
+    nextRun.setHours(hours, minutes, 0, 0)
+
+    // Se a hora já passou hoje, avançar para o próximo dia
+    if (nextRun <= now) {
+      nextRun.setDate(nextRun.getDate() + 1)
+    }
+
+    // Ajustar com base na frequência
+    if (schedule.frequency === "daily") {
+      // Já está configurado para o próximo dia
+    } else if (schedule.frequency === "weekly") {
+      // Encontrar o próximo dia da semana válido
+      const currentDay = nextRun.getDay()
+      const weekdays = schedule.weekdays || [1] // Default: Segunda-feira
+
+      // Ordenar os dias da semana
+      const sortedWeekdays = [...weekdays].sort((a, b) => a - b)
+
+      // Encontrar o próximo dia da semana
+      let nextWeekday = sortedWeekdays.find((day) => day > currentDay)
+
+      if (nextWeekday === undefined) {
+        // Se não houver dias maiores que o atual, pegar o primeiro da lista (próxima semana)
+        nextWeekday = sortedWeekdays[0]
+        nextRun.setDate(nextRun.getDate() + (7 - currentDay + nextWeekday))
+      } else {
+        // Avançar para o próximo dia da semana
+        nextRun.setDate(nextRun.getDate() + (nextWeekday - currentDay))
+      }
+    } else if (schedule.frequency === "monthly") {
+      // Configurar para o dia do mês especificado
+      const dayOfMonth = schedule.dayOfMonth || 1
+
+      // Obter o último dia do mês atual
+      const lastDayOfMonth = new Date(nextRun.getFullYear(), nextRun.getMonth() + 1, 0).getDate()
+
+      // Ajustar o dia (limitado ao último dia do mês)
+      const targetDay = Math.min(dayOfMonth, lastDayOfMonth)
+
+      // Se o dia já passou neste mês, avançar para o próximo mês
+      if (nextRun.getDate() > targetDay) {
+        nextRun.setMonth(nextRun.getMonth() + 1)
+      }
+
+      nextRun.setDate(targetDay)
+    }
+
+    return nextRun.toISOString()
   }
 }
 
