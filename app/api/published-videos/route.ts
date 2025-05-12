@@ -1,17 +1,18 @@
 import { NextResponse } from "next/server"
-import { getPublishedVideos } from "@/lib/redis"
+import { createLogger } from "@/lib/logger"
+
+const logger = createLogger("API:PublishedVideos")
 
 export async function GET() {
   try {
-    // Obter todos os vídeos publicados
-    const videos = await getPublishedVideos()
-
+    // Como não temos mais Redis, retornamos uma lista vazia
     return NextResponse.json({
       success: true,
-      videos,
+      videos: [],
+      message: "Funcionalidade de listagem de vídeos publicados não está disponível sem armazenamento persistente",
     })
   } catch (error: any) {
-    console.error("Erro ao buscar vídeos publicados:", error)
+    logger.error("Erro ao buscar vídeos publicados:", error)
     return NextResponse.json(
       {
         success: false,

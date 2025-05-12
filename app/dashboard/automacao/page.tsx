@@ -1,6 +1,6 @@
-import { SuperCardGenerator } from "@/components/super-card-generator"
-import { ScheduleAutomation } from "@/components/schedule-automation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { SuperCardGenerator } from "@/components/super-card-generator"
+import { AutoGenerationScheduler } from "@/components/auto-generation-scheduler"
 
 export default function AutomacaoPage() {
   return (
@@ -10,18 +10,24 @@ export default function AutomacaoPage() {
         Configure a automação para gerar e publicar cards automaticamente, economizando seu tempo.
       </p>
 
-      <Tabs defaultValue="super" className="w-full mb-8">
+      <Tabs defaultValue="quick" className="w-full mb-8">
         <TabsList className="grid grid-cols-2 mb-6">
-          <TabsTrigger value="super">Super Gerador</TabsTrigger>
-          <TabsTrigger value="schedules">Agendamentos</TabsTrigger>
+          <TabsTrigger value="quick">Geração Rápida</TabsTrigger>
+          <TabsTrigger value="scheduler">Agendamentos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="super">
+        <TabsContent value="quick">
+          <div className="mb-4">
+            <p className="text-gray-600 mb-4">
+              Use esta ferramenta para gerar e baixar cards de produtos com apenas um clique. Agora com design elegante
+              e opções avançadas de personalização.
+            </p>
+          </div>
           <SuperCardGenerator />
         </TabsContent>
 
-        <TabsContent value="schedules">
-          <ScheduleAutomation />
+        <TabsContent value="scheduler">
+          <AutoGenerationScheduler />
         </TabsContent>
       </Tabs>
     </div>

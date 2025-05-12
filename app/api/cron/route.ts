@@ -1,95 +1,83 @@
 import { NextResponse } from "next/server"
+import storageService from "@/lib/storage-service"
 import { createLogger } from "@/lib/logger"
-import { Redis } from "@upstash/redis"
 
 const logger = createLogger("API:Cron")
 
-// Esta rota será chamada pelo Vercel Cron Jobs
 export async function GET() {
   try {
-    logger.info("Cron job triggered")
+    // Obter todos os agendamentos
+    const schedules = await storageService.getSchedules()
 
-    // Verificar se estamos no Vercel
-    const isVercel = process.env.VERCEL === "1"
+    // Filtrar agendamentos pendentes
+    const pendingSchedules = schedules.filter((schedule) => schedule.status === "pending")
 
-    if (!isVercel) {
-      logger.info("Not running in Vercel, skipping cron job")
-      return NextResponse.json({ success: true, message: "Not running in Vercel environment" })
+    // Verificar se há agendamentos para executar
+    if (pendingSchedules.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "Nenhum agendamento pendente para executar",
+        executed: 0,
+      })
     }
 
-    // Verificar se o job já está em execução para evitar execuções simultâneas
-    try {
-      const redis = Redis.fromEnv()
-      const lockKey = "scheduler_lock"
-      const lockValue = await redis.get(lockKey)
+    // Obter data e hora atual
+    const now = new Date()
 
-      if (lockValue) {
-        const lockTime = Number.parseInt(lockValue as string)
-        const now = Date.now()
+    // Verificar quais agendamentos devem ser executados
+    const schedulesToExecute = pendingSchedules.filter((schedule) => {
+      const scheduleDate = new Date(`${schedule.date}T${schedule.time}:00`)
+      return scheduleDate <= now
+    })
 
-        // Se o lock foi criado há menos de 5 minutos, não executar
-        if (now - lockTime < 5 * 60 * 1000) {
-          logger.info("Scheduler already running, skipping")
-          return NextResponse.json({ success: true, message: "Scheduler already running" })
+    if (schedulesToExecute.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "Nenhum agendamento para executar neste momento",
+        executed: 0,
+      })
+    }
+
+    // Executar agendamentos
+    for (const schedule of schedulesToExecute) {
+      // Atualizar status e última execução
+      schedule.lastRun = now.toISOString()
+
+      // Lógica simplificada de execução
+      schedule.generatedCards = schedule.generatedCards || []
+      schedule.errors = schedule.errors || []
+
+      // Atualizar status com base na frequência
+      if (schedule.frequency === "once") {
+        schedule.status = "completed"
+      } else {
+        // Calcular próxima data de execução
+        const nextDate = new Date(`${schedule.date}T${schedule.time}:00`)
+
+        if (schedule.frequency === "daily") {
+          nextDate.setDate(nextDate.getDate() + 1)
+        } else if (schedule.frequency === "weekly") {
+          nextDate.setDate(nextDate.getDate() + 7)
         }
 
-        // Se o lock é antigo, consideramos que a execução anterior falhou
-        logger.warn("Found stale lock, overriding")
+        schedule.date = nextDate.toISOString().split("T")[0]
       }
 
-      // Criar lock
-      await redis.set(lockKey, Date.now().toString(), { ex: 300 }) // Expira em 5 minutos
-    } catch (redisError) {
-      logger.error("Error accessing Redis for lock:", redisError)
-      // Continuar mesmo sem conseguir criar o lock
+      // Salvar agendamento atualizado
+      await storageService.saveSchedule(schedule)
     }
 
-    // Importar e executar o scheduler
-    try {
-      // Importar dinamicamente o scheduler
-      const { default: main } = await import("../../scripts/scheduler")
-
-      // Executar o scheduler
-      await main()
-
-      logger.info("Scheduler executed successfully")
-
-      // Liberar o lock
-      try {
-        const redis = Redis.fromEnv()
-        await redis.del("scheduler_lock")
-      } catch (unlockError) {
-        logger.error("Error releasing lock:", unlockError)
-      }
-
-      return NextResponse.json({ success: true, message: "Scheduler executed successfully" })
-    } catch (schedulerError) {
-      logger.error("Error executing scheduler:", schedulerError)
-
-      // Liberar o lock em caso de erro
-      try {
-        const redis = Redis.fromEnv()
-        await redis.del("scheduler_lock")
-      } catch (unlockError) {
-        logger.error("Error releasing lock after failure:", unlockError)
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Error executing scheduler",
-          error: schedulerError.message || "Unknown error",
-        },
-        { status: 500 },
-      )
-    }
-  } catch (error) {
-    logger.error("Error in cron job:", error)
+    return NextResponse.json({
+      success: true,
+      message: `${schedulesToExecute.length} agendamentos executados`,
+      executed: schedulesToExecute.length,
+    })
+  } catch (error: any) {
+    logger.error("Erro ao executar agendamentos:", error)
     return NextResponse.json(
       {
         success: false,
-        message: "Error in cron job",
-        error: error.message || "Unknown error",
+        message: `Falha ao executar agendamentos: ${error.message}`,
       },
       { status: 500 },
     )

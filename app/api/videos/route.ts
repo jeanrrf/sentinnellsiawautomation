@@ -1,17 +1,20 @@
 import { NextResponse } from "next/server"
-import { getVideos } from "@/lib/redis"
+import storageService from "@/lib/storage-service"
+import { createLogger } from "@/lib/logger"
+
+const logger = createLogger("API:Videos")
 
 export async function GET() {
   try {
-    // Obter todos os vídeos não publicados
-    const videos = await getVideos()
+    // Obter todos os vídeos
+    const videos = await storageService.getVideos()
 
     return NextResponse.json({
       success: true,
       videos,
     })
   } catch (error: any) {
-    console.error("Erro ao buscar vídeos:", error)
+    logger.error("Erro ao buscar vídeos:", error)
     return NextResponse.json(
       {
         success: false,

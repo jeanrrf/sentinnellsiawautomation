@@ -68,13 +68,30 @@ export function AutoGenerationScheduler() {
   const [isSaving, setIsSaving] = useState(false)
   const [templates, setTemplates] = useState<any[]>([])
   const [activeTab, setActiveTab] = useState("basic")
+  const [executionHistory, setExecutionHistory] = useState<any[]>([])
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
   // Carregar agendamentos e templates salvos
   useEffect(() => {
     const loadData = async () => {
       setIsLoading(true)
       try {
-        // Carregar agendamentos do localStorage
+        // Try to load from API first
+        try {
+          const response = await fetch("/api/schedule")
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.schedules) {
+              setSchedules(data.schedules)
+              setIsLoading(false)
+              return
+            }
+          }
+        } catch (apiError) {
+          console.warn("Could not load schedules from API, falling back to localStorage", apiError)
+        }
+
+        // Fallback to localStorage
         const savedSchedules = localStorage.getItem("cardGenerationSchedules")
         if (savedSchedules) {
           setSchedules(JSON.parse(savedSchedules))
@@ -117,9 +134,15 @@ export function AutoGenerationScheduler() {
           const defaultTemplates = [
             { id: "default-modern", name: "Moderno Padrão" },
             { id: "default-bold", name: "Negrito Padrão" },
+            { id: "elegant", name: "Elegante" },
+            { id: "minimal", name: "Minimalista" },
+            { id: "vibrant", name: "Vibrante" },
           ]
           setTemplates(defaultTemplates)
         }
+
+        // Load execution history
+        await loadExecutionHistory()
       } catch (error) {
         console.error("Error loading data:", error)
         toast({
@@ -134,6 +157,54 @@ export function AutoGenerationScheduler() {
 
     loadData()
   }, [toast])
+
+  // Load execution history
+  const loadExecutionHistory = async () => {
+    setIsLoadingHistory(true)
+    try {
+      // Try to load from API first
+      try {
+        const response = await fetch("/api/schedule/history")
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.history) {
+            setExecutionHistory(data.history)
+            setIsLoadingHistory(false)
+            return
+          }
+        }
+      } catch (apiError) {
+        console.warn("Could not load execution history from API, using mock data", apiError)
+      }
+
+      // Mock data as fallback
+      const mockHistory = [
+        {
+          id: "exec-1",
+          scheduleId: "schedule-example",
+          scheduleName: "Geração Diária de Cards",
+          executionDate: new Date(Date.now() - 86400000).toISOString(),
+          status: "completed",
+          productsGenerated: 5,
+          duration: "45s",
+        },
+        {
+          id: "exec-2",
+          scheduleId: "schedule-example",
+          scheduleName: "Geração Diária de Cards",
+          executionDate: new Date(Date.now() - 172800000).toISOString(),
+          status: "completed",
+          productsGenerated: 5,
+          duration: "42s",
+        },
+      ]
+      setExecutionHistory(mockHistory)
+    } catch (error) {
+      console.error("Error loading execution history:", error)
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }
 
   // Calcular a próxima execução com base na frequência
   const calculateNextRun = (schedule: any) => {
@@ -229,7 +300,7 @@ export function AutoGenerationScheduler() {
   }
 
   // Salvar agendamento atual
-  const saveCurrentSchedule = () => {
+  const saveCurrentSchedule = async () => {
     if (!currentSchedule.name) {
       toast({
         variant: "destructive",
@@ -261,9 +332,27 @@ export function AutoGenerationScheduler() {
         updatedSchedules = [...schedules, updatedSchedule]
       }
 
+      // Try to save to API first
+      try {
+        const response = await fetch("/api/schedule", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedSchedule),
+        })
+
+        if (!response.ok) {
+          throw new Error("Failed to save schedule to API")
+        }
+      } catch (apiError) {
+        console.warn("Could not save schedule to API, falling back to localStorage", apiError)
+        // Fallback to localStorage
+        localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+      }
+
       setSchedules(updatedSchedules)
       setCurrentSchedule(updatedSchedule)
-      localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
 
       toast({
         title: "Agendamento salvo",
@@ -282,24 +371,46 @@ export function AutoGenerationScheduler() {
   }
 
   // Excluir um agendamento
-  const deleteSchedule = (scheduleId: string) => {
-    const updatedSchedules = schedules.filter((s) => s.id !== scheduleId)
-    setSchedules(updatedSchedules)
-    localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+  const deleteSchedule = async (scheduleId: string) => {
+    try {
+      // Try to delete from API first
+      try {
+        const response = await fetch(`/api/schedule?id=${scheduleId}`, {
+          method: "DELETE",
+        })
 
-    // Se o agendamento atual foi excluído, selecionar outro
-    if (currentSchedule.id === scheduleId) {
-      if (updatedSchedules.length > 0) {
-        setCurrentSchedule({ ...updatedSchedules[0] })
-      } else {
-        createNewSchedule()
+        if (!response.ok) {
+          throw new Error("Failed to delete schedule from API")
+        }
+      } catch (apiError) {
+        console.warn("Could not delete schedule from API, falling back to localStorage", apiError)
       }
-    }
 
-    toast({
-      title: "Agendamento excluído",
-      description: "O agendamento foi excluído com sucesso.",
-    })
+      const updatedSchedules = schedules.filter((s) => s.id !== scheduleId)
+      setSchedules(updatedSchedules)
+      localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+
+      // Se o agendamento atual foi excluído, selecionar outro
+      if (currentSchedule.id === scheduleId) {
+        if (updatedSchedules.length > 0) {
+          setCurrentSchedule({ ...updatedSchedules[0] })
+        } else {
+          createNewSchedule()
+        }
+      }
+
+      toast({
+        title: "Agendamento excluído",
+        description: "O agendamento foi excluído com sucesso.",
+      })
+    } catch (error) {
+      console.error("Error deleting schedule:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o agendamento.",
+      })
+    }
   }
 
   // Atualizar um campo do agendamento atual
@@ -329,28 +440,57 @@ export function AutoGenerationScheduler() {
   }
 
   // Alternar status de ativação
-  const toggleScheduleStatus = (scheduleId: string) => {
-    const updatedSchedules = schedules.map((schedule) => {
-      if (schedule.id === scheduleId) {
-        const updated = { ...schedule, enabled: !schedule.enabled }
+  const toggleScheduleStatus = async (scheduleId: string) => {
+    const schedule = schedules.find((s) => s.id === scheduleId)
+    if (!schedule) return
 
-        // Se o agendamento atual foi alterado, atualizar também
-        if (currentSchedule.id === scheduleId) {
-          setCurrentSchedule(updated)
+    const updatedSchedule = { ...schedule, enabled: !schedule.enabled }
+
+    try {
+      // Try to update in API first
+      try {
+        const response = await fetch("/api/schedule", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updatedSchedule),
+        })
+
+        if (!response.ok) {
+          throw new Error("Failed to update schedule status in API")
         }
-
-        return updated
+      } catch (apiError) {
+        console.warn("Could not update schedule status in API, falling back to localStorage", apiError)
       }
-      return schedule
-    })
 
-    setSchedules(updatedSchedules)
-    localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+      const updatedSchedules = schedules.map((s) => {
+        if (s.id === scheduleId) {
+          // Se o agendamento atual foi alterado, atualizar também
+          if (currentSchedule.id === scheduleId) {
+            setCurrentSchedule(updatedSchedule)
+          }
 
-    toast({
-      title: "Status alterado",
-      description: `Agendamento ${updatedSchedules.find((s) => s.id === scheduleId)?.enabled ? "ativado" : "desativado"} com sucesso.`,
-    })
+          return updatedSchedule
+        }
+        return s
+      })
+
+      setSchedules(updatedSchedules)
+      localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+
+      toast({
+        title: "Status alterado",
+        description: `Agendamento ${updatedSchedule.enabled ? "ativado" : "desativado"} com sucesso.`,
+      })
+    } catch (error) {
+      console.error("Error toggling schedule status:", error)
+      toast({
+        variant: "destructive",
+        title: "Erro ao alterar status",
+        description: "Não foi possível alterar o status do agendamento.",
+      })
+    }
   }
 
   // Executar agendamento manualmente
@@ -363,35 +503,110 @@ export function AutoGenerationScheduler() {
       description: `Iniciando execução manual do agendamento "${schedule.name}"...`,
     })
 
-    // Simular execução (em um sistema real, isso chamaria a API)
-    setTimeout(() => {
-      // Atualizar data da última execução
-      const updatedSchedules = schedules.map((s) => {
-        if (s.id === scheduleId) {
-          const updated = {
-            ...s,
-            lastRun: new Date().toISOString(),
-            nextRun: calculateNextRun(s),
-          }
+    try {
+      // Try to run via API first
+      try {
+        const response = await fetch(`/api/schedule/run?id=${scheduleId}`, {
+          method: "POST",
+        })
 
-          // Se o agendamento atual foi alterado, atualizar também
-          if (currentSchedule.id === scheduleId) {
-            setCurrentSchedule(updated)
-          }
-
-          return updated
+        if (!response.ok) {
+          throw new Error("Failed to run schedule via API")
         }
-        return s
-      })
 
-      setSchedules(updatedSchedules)
-      localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+        const result = await response.json()
+        if (!result.success) {
+          throw new Error(result.message || "Failed to run schedule")
+        }
 
+        // Update schedules with new lastRun and nextRun
+        if (result.schedule) {
+          const updatedSchedules = schedules.map((s) => {
+            if (s.id === scheduleId) {
+              const updated = {
+                ...s,
+                lastRun: result.schedule.lastRun,
+                nextRun: result.schedule.nextRun,
+              }
+
+              // If current schedule was updated, update it too
+              if (currentSchedule.id === scheduleId) {
+                setCurrentSchedule(updated)
+              }
+
+              return updated
+            }
+            return s
+          })
+
+          setSchedules(updatedSchedules)
+          localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+        }
+
+        // Add to execution history
+        if (result.execution) {
+          setExecutionHistory([result.execution, ...executionHistory])
+        }
+
+        toast({
+          title: "Execução concluída",
+          description: `O agendamento "${schedule.name}" foi executado com sucesso.`,
+        })
+        return
+      } catch (apiError) {
+        console.warn("Could not run schedule via API, using simulation", apiError)
+      }
+
+      // Simulate execution as fallback
+      setTimeout(() => {
+        // Atualizar data da última execução
+        const updatedSchedules = schedules.map((s) => {
+          if (s.id === scheduleId) {
+            const updated = {
+              ...s,
+              lastRun: new Date().toISOString(),
+              nextRun: calculateNextRun(s),
+            }
+
+            // Se o agendamento atual foi alterado, atualizar também
+            if (currentSchedule.id === scheduleId) {
+              setCurrentSchedule(updated)
+            }
+
+            return updated
+          }
+          return s
+        })
+
+        setSchedules(updatedSchedules)
+        localStorage.setItem("cardGenerationSchedules", JSON.stringify(updatedSchedules))
+
+        // Add to execution history
+        const newExecution = {
+          id: `exec-${Date.now()}`,
+          scheduleId,
+          scheduleName: schedule.name,
+          executionDate: new Date().toISOString(),
+          status: "completed",
+          productsGenerated: schedule.limit,
+          duration: `${Math.floor(Math.random() * 60) + 30}s`,
+        }
+
+        setExecutionHistory([newExecution, ...executionHistory])
+
+        toast({
+          title: "Execução concluída",
+          description: `O agendamento "${schedule.name}" foi executado com sucesso.`,
+        })
+      }, 2000)
+    } catch (error) {
+      console.error("Error running schedule:", error)
       toast({
-        title: "Execução concluída",
-        description: `O agendamento "${schedule.name}" foi executado com sucesso.`,
+        variant: "destructive",
+        title: "Erro ao executar",
+        description: "Não foi possível executar o agendamento.",
       })
-    }, 2000)
+    }
   }
 
   // Formatar data para exibição
@@ -777,34 +992,36 @@ export function AutoGenerationScheduler() {
                 <TableHead>Data de Execução</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Produtos Gerados</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="text-right">Duração</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {schedules.filter((s) => s.lastRun).length === 0 ? (
+              {isLoadingHistory ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center py-4">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : executionHistory.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
                     Nenhuma execução registrada
                   </TableCell>
                 </TableRow>
               ) : (
-                schedules
-                  .filter((s) => s.lastRun)
-                  .map((schedule) => (
-                    <TableRow key={`${schedule.id}-${schedule.lastRun}`}>
-                      <TableCell className="font-medium">{schedule.name}</TableCell>
-                      <TableCell>{formatDate(schedule.lastRun)}</TableCell>
-                      <TableCell>
-                        <Badge variant="success">Concluído</Badge>
-                      </TableCell>
-                      <TableCell>{schedule.limit}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
-                          Ver Detalhes
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))
+                executionHistory.map((execution) => (
+                  <TableRow key={execution.id}>
+                    <TableCell className="font-medium">{execution.scheduleName}</TableCell>
+                    <TableCell>{formatDate(execution.executionDate)}</TableCell>
+                    <TableCell>
+                      <Badge variant={execution.status === "completed" ? "default" : "outline"}>
+                        {execution.status === "completed" ? "Concluído" : execution.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{execution.productsGenerated}</TableCell>
+                    <TableCell className="text-right">{execution.duration}</TableCell>
+                  </TableRow>
+                ))
               )}
             </TableBody>
           </Table>

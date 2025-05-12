@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createLogger, ErrorCodes } from "@/lib/logger"
 import crypto from "crypto"
+import storageService from "@/lib/storage-service"
 
 const logger = createLogger("api-products")
 
@@ -18,6 +19,19 @@ function generateSignature(appId: string, timestamp: number, payload: string, se
 export async function GET(request: Request) {
   try {
     logger.info("Recebida solicitação para buscar produtos")
+
+    // Verificar se temos produtos armazenados temporariamente
+    const cachedProducts = await storageService.getProducts()
+    if (cachedProducts && cachedProducts.length > 0) {
+      logger.info(`Retornando ${cachedProducts.length} produtos do armazenamento temporário`)
+      return NextResponse.json({
+        success: true,
+        products: cachedProducts,
+        total: cachedProducts.length,
+        source: "temporary-storage",
+        timestamp: new Date().toISOString(),
+      })
+    }
 
     if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET || !SHOPEE_AFFILIATE_API_URL) {
       const errorMessage = "Credenciais da API Shopee não configuradas"
@@ -137,6 +151,9 @@ export async function GET(request: Request) {
         calculatedOriginalPrice: originalPrice,
       }
     })
+
+    // Salvar produtos no armazenamento temporário
+    await storageService.saveProducts(processedProducts)
 
     return NextResponse.json({
       success: true,

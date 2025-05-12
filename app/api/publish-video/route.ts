@@ -1,23 +1,52 @@
 import { NextResponse } from "next/server"
-import { publishVideo } from "@/lib/redis"
+import { createLogger } from "@/lib/logger"
+import storageService from "@/lib/storage-service"
 
-export async function POST(req: Request) {
+const logger = createLogger("API:PublishVideo")
+
+export async function POST(request: Request) {
   try {
-    const { productId } = await req.json()
+    const { videoId } = await request.json()
 
-    if (!productId) {
-      return NextResponse.json({ success: false, message: "ID do produto é obrigatório" }, { status: 400 })
+    if (!videoId) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "ID do vídeo é obrigatório",
+        },
+        { status: 400 },
+      )
     }
 
-    // Publicar o vídeo
-    await publishVideo(productId)
+    // Buscar todos os vídeos
+    const videos = await storageService.getVideos()
+
+    // Encontrar o vídeo pelo ID
+    const video = videos.find((v) => v.id === videoId)
+
+    if (!video) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Vídeo não encontrado",
+        },
+        { status: 404 },
+      )
+    }
+
+    // Atualizar o status do vídeo para "published"
+    video.status = "published"
+
+    // Salvar o vídeo atualizado
+    await storageService.saveVideo(video)
 
     return NextResponse.json({
       success: true,
       message: "Vídeo publicado com sucesso",
+      video,
     })
   } catch (error: any) {
-    console.error("Erro ao publicar vídeo:", error)
+    logger.error("Erro ao publicar vídeo:", error)
     return NextResponse.json(
       {
         success: false,
