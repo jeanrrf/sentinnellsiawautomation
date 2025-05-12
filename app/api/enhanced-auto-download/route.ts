@@ -324,7 +324,7 @@ function generateEnhancedDownloadPage(product: any, description: string, apiBase
         updateStatus(50, 'Preparando download...');
         
         // Criar conteúdo do texto
-        const textContent = '\\nProduct: ' + product.productName +
+        const textContent = 'Product: ' + product.productName +
           '\\nID: ' + product.itemId +
           '\\nPrice: R$ ' + Number(product.price).toFixed(2) +
           (product.calculatedOriginalPrice ? '\\nOriginal Price: R$ ' + product.calculatedOriginalPrice : '') +
@@ -362,7 +362,7 @@ function generateEnhancedDownloadPage(product: any, description: string, apiBase
         const zip = new JSZip();
         
         // Adicionar arquivo de texto com informações do produto
-        const textContent = '\\nProduct: ' + product.productName +
+        const textContent = 'Product: ' + product.productName +
           '\\nID: ' + product.itemId +
           '\\nPrice: R$ ' + Number(product.price).toFixed(2) +
           (product.calculatedOriginalPrice ? '\\nOriginal Price: R$ ' + product.calculatedOriginalPrice : '') +
