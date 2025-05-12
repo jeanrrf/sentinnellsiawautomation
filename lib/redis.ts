@@ -1,19 +1,18 @@
 import { createLogger } from "./logger"
 
-const logger = createLogger("Redis")
+const logger = createLogger("redis")
 
-// In-memory storage for processed IDs (non-persistent)
-const processedIds: Set<string> = new Set()
+// Define types for Redis client
+interface RedisClient {
+  get: (key: string) => Promise<string | null>
+  set: (key: string, value: string, options?: any) => Promise<void>
+  sadd: (key: string, ...members: string[]) => Promise<number>
+  srem: (key: string, member: string) => Promise<number>
+  smembers: (key: string) => Promise<string[]>
+  sismember: (key: string, member: string) => Promise<number>
+}
 
-// In-memory storage for videos (non-persistent)
-const videos: any[] = []
-
-// In-memory storage for products (non-persistent)
-const products: Record<string, any> = {}
-
-// In-memory storage for descriptions (non-persistent)
-const descriptions: Record<string, string> = {}
-
+// Redis keys
 export const CACHE_KEYS = {
   PRODUCTS: "products",
   VIDEOS: "videos",
@@ -22,173 +21,146 @@ export const CACHE_KEYS = {
   DESCRIPTIONS: "descriptions",
   SCHEDULES: "schedules",
   EXECUTION_HISTORY: "execution_history",
-  DESCRIPTION_PREFIX: "product_description:",
   VIDEO_PREFIX: "video:",
+  DESCRIPTION_PREFIX: "description:",
+  EXCLUDED_PRODUCTS: "excluded_products",
 }
 
-export async function getRedisClient(): Promise<any | null> {
-  // Verificar se as variáveis de ambiente estão definidas
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    logger.warn("Redis environment variables are not set")
-    return null
+// In-memory storage for fallback
+const inMemoryStorage: Record<string, string> = {}
+const inMemorySets: Record<string, Set<string>> = {}
+
+// In-memory Redis client for fallback
+const inMemoryRedisClient: RedisClient = {
+  async get(key: string) {
+    logger.warn(`Using in-memory Redis fallback for GET: ${key}`)
+    return inMemoryStorage[key] || null
+  },
+  async set(key: string, value: string, options?: any) {
+    logger.warn(`Using in-memory Redis fallback for SET: ${key}`)
+    inMemoryStorage[key] = value
+  },
+  async sadd(key: string, ...members: string[]) {
+    logger.warn(`Using in-memory Redis fallback for SADD: ${key}`)
+    if (!inMemorySets[key]) {
+      inMemorySets[key] = new Set()
+    }
+    members.forEach((member) => inMemorySets[key].add(member))
+    return members.length
+  },
+  async srem(key: string, member: string) {
+    logger.warn(`Using in-memory Redis fallback for SREM: ${key}`)
+    if (inMemorySets[key]) {
+      inMemorySets[key].delete(member)
+      return 1
+    }
+    return 0
+  },
+  async smembers(key: string) {
+    logger.warn(`Using in-memory Redis fallback for SMEMBERS: ${key}`)
+    return Array.from(inMemorySets[key] || new Set())
+  },
+  async sismember(key: string, member: string) {
+    logger.warn(`Using in-memory Redis fallback for SISMEMBER: ${key}`)
+    return inMemorySets[key]?.has(member) ? 1 : 0
+  },
+}
+
+// Redis client instance
+let redisClient: RedisClient | null = null
+
+/**
+ * Initializes and returns the Redis client
+ */
+export async function getRedisClient(): Promise<RedisClient | null> {
+  if (redisClient) {
+    return redisClient
   }
 
   try {
-    // Aviso de que estamos usando uma implementação de fallback
-    logger.warn("Using in-memory fallback instead of Redis")
-    return {
-      get: async (key: string) => {
-        if (key === CACHE_KEYS.PRODUCTS) {
-          return JSON.stringify(Object.values(products))
-        }
-        if (key === CACHE_KEYS.VIDEOS) {
-          return JSON.stringify(videos)
-        }
-        if (key === CACHE_KEYS.PUBLISHED_VIDEOS) {
-          return JSON.stringify(videos.filter((v) => v.status === "published"))
-        }
-        if (key.startsWith(CACHE_KEYS.DESCRIPTION_PREFIX)) {
-          const productId = key.replace(CACHE_KEYS.DESCRIPTION_PREFIX, "")
-          return descriptions[productId] || null
-        }
-        return null
-      },
-      set: async (key: string, value: any) => {
-        if (key === CACHE_KEYS.PRODUCTS) {
-          const productArray = JSON.parse(value)
-          productArray.forEach((p: any) => {
-            products[p.id] = p
-          })
-        }
-        if (key === CACHE_KEYS.VIDEOS) {
-          videos.length = 0
-          videos.push(...JSON.parse(value))
-        }
-        if (key.startsWith(CACHE_KEYS.DESCRIPTION_PREFIX)) {
-          const productId = key.replace(CACHE_KEYS.DESCRIPTION_PREFIX, "")
-          descriptions[productId] = value
-        }
-        return true
-      },
-      sismember: async (key: string, value: string) => {
-        if (key === CACHE_KEYS.PROCESSED_IDS) {
-          return processedIds.has(value) ? 1 : 0
-        }
-        return 0
-      },
-      sadd: async (key: string, value: string) => {
-        if (key === CACHE_KEYS.PROCESSED_IDS) {
-          processedIds.add(value)
-        }
-        return 1
-      },
-      ping: async () => "PONG",
+    // Check if we have the Redis URL
+    const redisUrl = process.env.REDIS_URL || process.env.KV_REST_API_URL || process.env.KV_URL
+
+    if (!redisUrl) {
+      logger.warn("Redis URL not found in environment variables, using in-memory fallback")
+      redisClient = inMemoryRedisClient
+      return redisClient
     }
+
+    // Import the Redis client
+    const { Redis } = await import("@upstash/redis")
+
+    // Create Redis client
+    redisClient = new Redis({
+      url: redisUrl,
+      token: process.env.KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN,
+    })
+
+    logger.info("Redis client initialized successfully")
+    return redisClient
   } catch (error) {
     logger.error("Failed to initialize Redis client:", error)
-    return null
+    logger.warn("Using in-memory fallback for Redis")
+    redisClient = inMemoryRedisClient
+    return redisClient
   }
 }
 
-// Função para obter produtos em cache
-export async function getCachedProducts(): Promise<any | null> {
-  try {
-    const redis = await getRedisClient()
-
-    if (!redis) {
-      logger.warn("Redis client not available, returning null for cached products")
-      return null
-    }
-
-    const productsJson = await redis.get(CACHE_KEYS.PRODUCTS)
-
-    if (!productsJson) {
-      logger.warn("No products found in cache")
-      return null
-    }
-
-    return JSON.parse(productsJson as string)
-  } catch (error) {
-    logger.error("Error getting cached products:", error)
-    return null
-  }
-}
-
-// Função para obter vídeos em cache
+/**
+ * Get videos from Redis
+ */
 export async function getVideos(): Promise<any[]> {
   try {
     const redis = await getRedisClient()
-
-    if (!redis) {
-      logger.warn("Redis client not available, returning empty videos array")
-      return []
-    }
+    if (!redis) return []
 
     const videosJson = await redis.get(CACHE_KEYS.VIDEOS)
-
-    if (!videosJson) {
-      logger.warn("No videos found in cache")
-      return []
-    }
-
-    return JSON.parse(videosJson as string)
+    return videosJson ? JSON.parse(videosJson) : []
   } catch (error) {
-    logger.error("Error getting cached videos:", error)
+    logger.error("Error getting videos:", error)
     return []
   }
 }
 
-// Função para obter vídeos publicados em cache
+/**
+ * Get published videos from Redis
+ */
 export async function getPublishedVideos(): Promise<any[]> {
   try {
     const redis = await getRedisClient()
-
-    if (!redis) {
-      logger.warn("Redis client not available, returning empty published videos array")
-      return []
-    }
+    if (!redis) return []
 
     const videosJson = await redis.get(CACHE_KEYS.PUBLISHED_VIDEOS)
-
-    if (!videosJson) {
-      logger.warn("No published videos found in cache")
-      return []
-    }
-
-    return JSON.parse(videosJson as string)
+    return videosJson ? JSON.parse(videosJson) : []
   } catch (error) {
-    logger.error("Error getting cached published videos:", error)
+    logger.error("Error getting published videos:", error)
     return []
   }
 }
 
-// Função para verificar se o ID já foi processado
+/**
+ * Check if ID has been processed
+ */
 export async function isIdProcessed(id: string): Promise<boolean> {
   try {
     const redis = await getRedisClient()
+    if (!redis) return false
 
-    if (!redis) {
-      logger.warn("Redis client not available, returning false for isIdProcessed")
-      return false
-    }
-
-    const processed = await redis.sismember(CACHE_KEYS.PROCESSED_IDS, id)
-    return processed === 1
+    const isMember = await redis.sismember(CACHE_KEYS.PROCESSED_IDS, id)
+    return isMember === 1
   } catch (error) {
     logger.error(`Error checking if ID ${id} is processed:`, error)
     return false
   }
 }
 
-// Função para adicionar o ID aos processados
+/**
+ * Add processed ID
+ */
 export async function addProcessedId(id: string): Promise<void> {
   try {
     const redis = await getRedisClient()
-
-    if (!redis) {
-      logger.warn("Redis client not available, cannot add processed ID")
-      return
-    }
+    if (!redis) return
 
     await redis.sadd(CACHE_KEYS.PROCESSED_IDS, id)
     logger.info(`Added ID ${id} to processed IDs`)
@@ -197,33 +169,51 @@ export async function addProcessedId(id: string): Promise<void> {
   }
 }
 
-// Função para obter a descrição em cache
+/**
+ * Get cached products from Redis
+ */
+export async function getCachedProducts(): Promise<any[] | null> {
+  try {
+    const redis = await getRedisClient()
+    if (!redis) return null
+
+    const productsJson = await redis.get(CACHE_KEYS.PRODUCTS)
+    if (!productsJson) return null
+
+    return JSON.parse(productsJson)
+  } catch (error) {
+    logger.error("Error getting cached products:", error)
+    return null
+  }
+}
+
+/**
+ * Get cached description for a product
+ */
 export async function getCachedDescription(productId: string): Promise<string | null> {
   try {
     const redis = await getRedisClient()
+    if (!redis) return null
 
-    if (!redis) {
-      logger.warn("Redis client not available, cannot get cached description")
-      return null
-    }
-
-    const description = await redis.get(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`)
-    return description as string | null
+    const key = `${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`
+    return await redis.get(key)
   } catch (error) {
     logger.error(`Error getting cached description for product ${productId}:`, error)
     return null
   }
 }
 
+// Create the redis object with all functions
 const redis = {
+  getRedisClient,
   getVideos,
   getPublishedVideos,
   isIdProcessed,
   addProcessedId,
-  getCachedDescription,
   getCachedProducts,
-  getRedisClient,
+  getCachedDescription,
   CACHE_KEYS,
 }
 
+// Export the redis object as default
 export default redis

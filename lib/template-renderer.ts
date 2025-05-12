@@ -54,377 +54,126 @@ export function renderProductCardTemplate(product: any, description: string, sty
   // Format the description with emojis and line breaks
   const formattedDescription = description.replace(/\n/g, "<br>")
 
-  // Add prefix to all CSS classes to avoid conflicts
-  const renderedTemplate = `<!DOCTYPE html>
+  // Simplified template to avoid syntax errors
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
-
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Card Produto TikTok</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Product Card</title>
   <style>
-    /* Reset and basic settings */
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-    
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-
     body {
-      font-family: 'Montserrat', sans-serif;
-      background: #000;
-      color: #fff;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .sm-card-container * {
-      box-sizing: border-box;
+      font-family: Arial, sans-serif;
       margin: 0;
       padding: 0;
-      font-family: 'Montserrat', sans-serif;
-    }
-
-    .sm-card-container {
-      width: 100%;
-      height: 100%;
-      aspect-ratio: 9/16;
-      background: #000;
-      overflow: hidden;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
-    }
-
-    /* Animated background */
-    .sm-background {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(45deg, #6a00f4, #00e0ff, #6a00f4);
-      background-size: 400% 400%;
-      animation: sm-gradientBG 8s ease infinite;
-      opacity: 0.15;
-      z-index: 0;
-    }
-
-    @keyframes sm-gradientBG {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    /* Logo */
-    .sm-logo {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      padding: 10px 0;
-      z-index: 10;
-      font-size: 1.8rem;
-      font-weight: 700;
-      font-family: 'Bruno Ace SC', sans-serif;
-      background: linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a);
-      background-size: 300% 300%;
-      background-clip: text;
-      -webkit-background-clip: text;
-      color: transparent;
-      -webkit-text-fill-color: transparent;
-      animation: sm-logoGradient 5s ease infinite;
-      filter: drop-shadow(0 2px 12px #b155ff88);
-      text-align: center;
-    }
-
-    @keyframes sm-logoGradient {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
-    }
-
-    /* Shop badge */
-    .sm-shop-badge {
-      position: absolute;
-      top: 50px;
-      right: 15px;
-      z-index: 10;
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(5px);
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      color: #ffffff;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .sm-shop-badge-icon {
-      color: #ff007a;
-    }
-
-    /* Main card */
-    .sm-card {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 60px 15px 20px;
-      z-index: 1;
-      background: rgba(15, 15, 15, 0.7);
-      backdrop-filter: blur(10px);
-    }
-
-    /* Product image */
-    .sm-product-image-container {
-      width: 100%;
-      height: 45%;
-      margin: 10px 0;
+      background: #f0f0f0;
       display: flex;
       justify-content: center;
       align-items: center;
-      overflow: hidden;
-      border-radius: 15px;
-      position: relative;
+      min-height: 100vh;
     }
-
-    .sm-product-image {
+    .card {
       width: 100%;
-      height: 100%;
-      object-fit: contain;
-      border-radius: 15px;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+      max-width: 400px;
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-
-    /* Discount badge */
-    .sm-discount-badge-corner {
-      position: absolute;
-      top: 0;
-      right: 0;
-      background: #ff0055;
+    .header {
+      background: #4a6cf7;
       color: white;
-      font-size: 0.9rem;
+      padding: 15px;
+      text-align: center;
+    }
+    .content {
+      padding: 20px;
+    }
+    .product-image {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin-bottom: 15px;
+    }
+    .product-title {
+      font-size: 18px;
       font-weight: bold;
-      padding: 10px 15px;
-      border-radius: 0 15px 0 15px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-      z-index: 2;
+      margin-bottom: 10px;
     }
-
-    /* Product title */
-    .sm-product-title {
-      font-size: 1.4rem;
-      line-height: 1.2;
-      text-align: center;
-      margin: 5px 0;
-      color: #ffffff;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-      padding: 0 10px;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    .price {
+      font-size: 24px;
+      font-weight: bold;
+      color: #e63946;
+      margin-bottom: 10px;
     }
-
-    /* Price */
-    .sm-price-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 10px 0;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-
-    .sm-current-price {
-      font-size: 2rem;
-      color: #ff0055;
-      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .sm-original-price {
-      font-size: 1.2rem;
-      color: #cccccc;
+    .original-price {
       text-decoration: line-through;
-      opacity: 0.7;
-    }
-
-    .sm-discount-badge {
-      background: #ff0055;
-      color: white;
-      font-size: 1rem;
-      padding: 8px 15px;
-      border-radius: 50%;
+      color: #888;
       margin-left: 10px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
-
-    /* Description */
-    .sm-product-description {
-      font-size: 1rem;
-      color: #cccccc;
-      margin: 10px 0;
+    .discount {
+      background: #e63946;
+      color: white;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-left: 10px;
+    }
+    .description {
+      margin: 15px 0;
+      line-height: 1.5;
+    }
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      margin: 15px 0;
+    }
+    .stat {
       text-align: center;
-      white-space: pre-line;
-      max-height: 20%;
-      overflow-y: auto;
-      padding: 0 10px;
+      flex: 1;
     }
-
-    /* Additional information */
-    .sm-product-info {
-      font-size: 0.9rem;
-      margin: 5px 0;
-      color: #cccccc;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 15px;
-    }
-
-    .sm-info-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .sm-star-rating {
-      color: #ffd700;
-    }
-
-    /* Buy button */
-    .sm-buy-button {
-      display: inline-block;
-      margin-top: 10px;
-      padding: 12px 35px;
-      background: linear-gradient(80deg, #c21244, #15e4ffb1);
-      color: #ffffff;
-      border-radius: 30px;
+    .button {
+      display: block;
+      background: #4a6cf7;
+      color: white;
+      text-align: center;
+      padding: 12px;
+      border-radius: 6px;
       text-decoration: none;
-      font-size: 1.2rem;
-      text-align: center;
-      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-
-    .sm-buy-button:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-    }
-
-    /* Highlight badges */
-    .sm-highlight-badges {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: 10px;
-      margin: 5px 0;
-    }
-
-    .sm-highlight-badge {
-      background: rgba(255, 255, 255, 0.1);
-      color: #ffffff;
-      padding: 5px 12px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .sm-badge-bestseller {
-      background: linear-gradient(45deg, #ffd700, #ff9500);
-      color: #000;
-    }
-
-    .sm-badge-hot {
-      background: linear-gradient(45deg, #ff416c, #ff4b2b);
-    }
-
-    .sm-badge-limited {
-      background: linear-gradient(45deg, #8e2de2, #4a00e0);
+      font-weight: bold;
+      margin-top: 15px;
     }
   </style>
 </head>
-
 <body>
-  <div class="sm-card-container">
-    <div class="sm-background"></div>
-    <div class="sm-logo">Sales Martins</div>
-    <div class="sm-shop-badge">
-      <span class="sm-shop-badge-icon">🏪</span>
-      <span>${shopName}</span>
+  <div class="card">
+    <div class="header">
+      <h1>Product Card</h1>
     </div>
-
-    <div class="sm-card">
-      <h1 class="sm-product-title">${product.productName}</h1>
-
-      <div class="sm-product-image-container">
-        <img src="${product.imageUrl}" alt="${product.productName}" class="sm-product-image">
-        ${discountPercentage ? `<div class="sm-discount-badge-corner">-${discountPercentage}%</div>` : ""}
+    <div class="content">
+      <img src="${product.imageUrl}" alt="${product.productName}" class="product-image">
+      <div class="product-title">${product.productName}</div>
+      <div class="price">
+        R$ ${currentPrice.toFixed(2)}
+        ${originalPrice ? `<span class="original-price">R$ ${originalPrice.toFixed(2)}</span>` : ""}
+        ${discountPercentage ? `<span class="discount">-${discountPercentage}%</span>` : ""}
       </div>
-
-      <div class="sm-price-container">
-        <span class="sm-current-price">R$ ${currentPrice.toFixed(2)}</span>
-        ${originalPrice ? `<span class="sm-original-price">R$ ${originalPrice.toFixed(2)}</span>` : ""}
-      </div>
-
-      <div class="sm-product-info">
-        <div class="sm-info-item">
-          <span class="sm-star-rating">⭐</span>
-          <span>${ratingStar}</span>
+      <div class="description">${formattedDescription}</div>
+      <div class="stats">
+        <div class="stat">
+          <div>Rating</div>
+          <div>${ratingStar} ⭐</div>
         </div>
-        <div class="sm-info-item">
-          <span>🛒</span>
-          <span>${sales}+ vendas</span>
+        <div class="stat">
+          <div>Sales</div>
+          <div>${sales}+</div>
         </div>
-        ${
-          commissionRate
-            ? `
-        <div class="sm-info-item">
-          <span>💰</span>
-          <span>${commissionRate} comissão</span>
-        </div>
-        `
-            : ""
-        }
       </div>
-
-      <div class="sm-highlight-badges">
-        ${sales > 1000 ? `<div class="sm-highlight-badge sm-badge-bestseller">🔥 Mais Vendido</div>` : ""}
-        ${discountPercentage && discountPercentage > 20 ? `<div class="sm-highlight-badge sm-badge-hot">💯 Super Oferta</div>` : ""}
-        <div class="sm-highlight-badge sm-badge-limited">⏱️ Tempo Limitado</div>
-      </div>
-
-      <div class="sm-product-description">${formattedDescription}</div>
-
-      <a href="${offerLink}" class="sm-buy-button">COMPRAR AGORA</a>
+      <a href="${offerLink}" class="button">Buy Now</a>
     </div>
   </div>
 </body>
-
 </html>`
-
-  return renderedTemplate
 }
 
 // Função para renderizar o template "ageminipara"
@@ -450,288 +199,122 @@ export function renderAgeminiParaTemplate(product: any, description: string) {
   // Formatar descrição
   const formattedDescription = description.replace(/\n/g, "<br>")
 
-  // Template Agemini Para
+  // Simplified template to avoid syntax errors
   return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Card Produto - Agemini Para</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <title>Agemini Para Template</title>
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Poppins', sans-serif;
-    }
-    
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-    
     body {
-      background: #f0f2f5;
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f7fa;
       display: flex;
-      align-items: center;
       justify-content: center;
-    }
-    
-    .ap-container {
-      width: 100%;
-      height: 100%;
-      aspect-ratio: 9/16;
-      position: relative;
-      overflow: hidden;
-      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    }
-    
-    .ap-header {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      padding: 15px;
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-      z-index: 10;
+      min-height: 100vh;
     }
-    
-    .ap-logo {
-      font-size: 1.5rem;
-      font-weight: 700;
-      color: #3a3a3a;
-      text-shadow: 1px 1px 2px rgba(255,255,255,0.5);
-    }
-    
-    .ap-shop-badge {
-      background: rgba(255,255,255,0.8);
-      padding: 5px 10px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      color: #555;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    }
-    
-    .ap-content {
-      position: relative;
+    .card {
       width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      padding: 70px 20px 20px;
-    }
-    
-    .ap-product-image {
-      width: 100%;
-      height: 40%;
-      object-fit: contain;
-      border-radius: 10px;
-      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      max-width: 400px;
       background: white;
-      padding: 10px;
-      margin-bottom: 15px;
-    }
-    
-    .ap-product-title {
-      font-size: 1.3rem;
-      font-weight: 600;
-      color: #333;
-      margin-bottom: 10px;
-      line-height: 1.3;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
+      border-radius: 10px;
       overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
-    
-    .ap-price-container {
-      display: flex;
-      align-items: center;
+    .header {
+      background: #118ab2;
+      color: white;
+      padding: 15px;
+      text-align: center;
+    }
+    .content {
+      padding: 20px;
+    }
+    .product-image {
+      width: 100%;
+      height: auto;
+      display: block;
       margin-bottom: 15px;
-      flex-wrap: wrap;
-      gap: 10px;
     }
-    
-    .ap-current-price {
-      font-size: 1.8rem;
-      font-weight: 700;
+    .product-title {
+      font-size: 18px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .price {
+      font-size: 24px;
+      font-weight: bold;
       color: #e63946;
+      margin-bottom: 10px;
     }
-    
-    .ap-original-price {
-      font-size: 1.1rem;
-      color: #888;
+    .original-price {
       text-decoration: line-through;
+      color: #888;
+      margin-left: 10px;
     }
-    
-    .ap-discount {
+    .discount {
       background: #e63946;
       color: white;
       padding: 3px 8px;
-      border-radius: 5px;
-      font-size: 0.9rem;
-      font-weight: 500;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-left: 10px;
     }
-    
-    .ap-description {
-      font-size: 0.95rem;
-      color: #555;
-      margin-bottom: 15px;
-      line-height: 1.4;
-      max-height: 20%;
-      overflow-y: auto;
-      background: rgba(255,255,255,0.7);
-      padding: 10px;
-      border-radius: 8px;
+    .description {
+      margin: 15px 0;
+      line-height: 1.5;
     }
-    
-    .ap-stats {
+    .stats {
       display: flex;
       justify-content: space-between;
-      margin-bottom: 15px;
+      margin: 15px 0;
     }
-    
-    .ap-stat-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      background: rgba(255,255,255,0.7);
-      padding: 8px;
-      border-radius: 8px;
-      width: 30%;
-    }
-    
-    .ap-stat-value {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: #333;
-    }
-    
-    .ap-stat-label {
-      font-size: 0.8rem;
-      color: #666;
-    }
-    
-    .ap-cta {
-      margin-top: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    
-    .ap-buy-button {
-      background: #e63946;
-      color: white;
-      padding: 12px;
-      border-radius: 8px;
+    .stat {
       text-align: center;
-      font-weight: 600;
-      font-size: 1.1rem;
-      text-decoration: none;
-      box-shadow: 0 4px 10px rgba(230,57,70,0.3);
-      transition: all 0.3s ease;
+      flex: 1;
     }
-    
-    .ap-buy-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 15px rgba(230,57,70,0.4);
-    }
-    
-    .ap-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 10px;
-    }
-    
-    .ap-tag {
-      background: rgba(255,255,255,0.7);
-      padding: 5px 10px;
-      border-radius: 20px;
-      font-size: 0.8rem;
-      color: #555;
-    }
-    
-    .ap-bestseller {
-      background: #ffd166;
-      color: #333;
-    }
-    
-    .ap-limited {
+    .button {
+      display: block;
       background: #118ab2;
       color: white;
-    }
-    
-    .ap-hot-deal {
-      background: #ef476f;
-      color: white;
+      text-align: center;
+      padding: 12px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: bold;
+      margin-top: 15px;
     }
   </style>
 </head>
 <body>
-  <div class="ap-container">
-    <div class="ap-header">
-      <div class="ap-logo">AgeminiPara</div>
-      <div class="ap-shop-badge">
-        <span>🏪</span>
-        <span>${shopName}</span>
-      </div>
+  <div class="card">
+    <div class="header">
+      <h1>Agemini Para</h1>
     </div>
-    
-    <div class="ap-content">
-      <img src="${product.imageUrl}" alt="${product.productName}" class="ap-product-image">
-      
-      <h1 class="ap-product-title">${product.productName}</h1>
-      
-      <div class="ap-price-container">
-        <span class="ap-current-price">R$ ${currentPrice.toFixed(2)}</span>
-        ${originalPrice ? `<span class="ap-original-price">R$ ${originalPrice.toFixed(2)}</span>` : ""}
-        ${discountPercentage ? `<span class="ap-discount">-${discountPercentage}%</span>` : ""}
+    <div class="content">
+      <img src="${product.imageUrl}" alt="${product.productName}" class="product-image">
+      <div class="product-title">${product.productName}</div>
+      <div class="price">
+        R$ ${currentPrice.toFixed(2)}
+        ${originalPrice ? `<span class="original-price">R$ ${originalPrice.toFixed(2)}</span>` : ""}
+        ${discountPercentage ? `<span class="discount">-${discountPercentage}%</span>` : ""}
       </div>
-      
-      <div class="ap-description">
-        ${formattedDescription}
-      </div>
-      
-      <div class="ap-stats">
-        <div class="ap-stat-item">
-          <span class="ap-stat-value">${ratingStar}</span>
-          <span class="ap-stat-label">Avaliação</span>
+      <div class="description">${formattedDescription}</div>
+      <div class="stats">
+        <div class="stat">
+          <div>Rating</div>
+          <div>${ratingStar} ⭐</div>
         </div>
-        
-        <div class="ap-stat-item">
-          <span class="ap-stat-value">${sales > 1000 ? (sales / 1000).toFixed(1) + "k" : sales}</span>
-          <span class="ap-stat-label">Vendidos</span>
-        </div>
-        
-        <div class="ap-stat-item">
-          <span class="ap-stat-value">${discountPercentage || 0}%</span>
-          <span class="ap-stat-label">Desconto</span>
+        <div class="stat">
+          <div>Sales</div>
+          <div>${sales}+</div>
         </div>
       </div>
-      
-      <div class="ap-cta">
-        <a href="${offerLink}" class="ap-buy-button">COMPRAR AGORA</a>
-        
-        <div class="ap-tags">
-          ${sales > 1000 ? `<span class="ap-tag ap-bestseller">🔥 Mais Vendido</span>` : ""}
-          ${discountPercentage > 20 ? `<span class="ap-tag ap-hot-deal">💰 Super Oferta</span>` : ""}
-          ${sales > 500 && discountPercentage > 10 ? `<span class="ap-tag ap-limited">⏱️ Tempo Limitado</span>` : ""}
-          <span class="ap-tag">#shopee</span>
-          <span class="ap-tag">#oferta</span>
-        </div>
-      </div>
+      <a href="${offerLink}" class="button">Buy Now</a>
     </div>
   </div>
 </body>
