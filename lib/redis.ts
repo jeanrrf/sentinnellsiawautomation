@@ -1,9 +1,18 @@
-import { Redis } from "@upstash/redis"
 import { createLogger } from "./logger"
 
 const logger = createLogger("Redis")
 
-let redisClient: Redis | null = null
+// In-memory storage for processed IDs (non-persistent)
+const processedIds: Set<string> = new Set()
+
+// In-memory storage for videos (non-persistent)
+const videos: any[] = []
+
+// In-memory storage for products (non-persistent)
+const products: Record<string, any> = {}
+
+// In-memory storage for descriptions (non-persistent)
+const descriptions: Record<string, string> = {}
 
 export const CACHE_KEYS = {
   PRODUCTS: "products",
@@ -17,32 +26,66 @@ export const CACHE_KEYS = {
   VIDEO_PREFIX: "video:",
 }
 
-export async function getRedisClient(): Promise<Redis | null> {
-  if (redisClient) {
-    return redisClient
+export async function getRedisClient(): Promise<any | null> {
+  // Verificar se as variáveis de ambiente estão definidas
+  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    logger.warn("Redis environment variables are not set")
+    return null
   }
 
   try {
-    // Verificar se as variáveis de ambiente estão definidas
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-      logger.warn("Redis environment variables are not set")
-      return null
+    // Aviso de que estamos usando uma implementação de fallback
+    logger.warn("Using in-memory fallback instead of Redis")
+    return {
+      get: async (key: string) => {
+        if (key === CACHE_KEYS.PRODUCTS) {
+          return JSON.stringify(Object.values(products))
+        }
+        if (key === CACHE_KEYS.VIDEOS) {
+          return JSON.stringify(videos)
+        }
+        if (key === CACHE_KEYS.PUBLISHED_VIDEOS) {
+          return JSON.stringify(videos.filter((v) => v.status === "published"))
+        }
+        if (key.startsWith(CACHE_KEYS.DESCRIPTION_PREFIX)) {
+          const productId = key.replace(CACHE_KEYS.DESCRIPTION_PREFIX, "")
+          return descriptions[productId] || null
+        }
+        return null
+      },
+      set: async (key: string, value: any) => {
+        if (key === CACHE_KEYS.PRODUCTS) {
+          const productArray = JSON.parse(value)
+          productArray.forEach((p: any) => {
+            products[p.id] = p
+          })
+        }
+        if (key === CACHE_KEYS.VIDEOS) {
+          videos.length = 0
+          videos.push(...JSON.parse(value))
+        }
+        if (key.startsWith(CACHE_KEYS.DESCRIPTION_PREFIX)) {
+          const productId = key.replace(CACHE_KEYS.DESCRIPTION_PREFIX, "")
+          descriptions[productId] = value
+        }
+        return true
+      },
+      sismember: async (key: string, value: string) => {
+        if (key === CACHE_KEYS.PROCESSED_IDS) {
+          return processedIds.has(value) ? 1 : 0
+        }
+        return 0
+      },
+      sadd: async (key: string, value: string) => {
+        if (key === CACHE_KEYS.PROCESSED_IDS) {
+          processedIds.add(value)
+        }
+        return 1
+      },
+      ping: async () => "PONG",
     }
-
-    // Criar cliente Redis
-    redisClient = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-
-    // Testar conexão
-    await redisClient.ping()
-    logger.info("Redis client initialized successfully")
-
-    return redisClient
   } catch (error) {
     logger.error("Failed to initialize Redis client:", error)
-    redisClient = null
     return null
   }
 }
