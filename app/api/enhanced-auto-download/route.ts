@@ -266,29 +266,27 @@ function generateEnhancedDownloadPage(product: any, description: string, apiBase
       
       for (let i = 0; i < templates.length; i++) {
         const template = templates[i];
-        updateLoadingText(\`Gerando card \${i+1}/\${templates.length}: \${template}\`);
+        updateLoadingText('Gerando card ' + (i+1) + '/' + templates.length + ': ' + template);
 
         try {
           // Gerar o card via API
-          const cardUrl = \`\${apiBaseUrl}/api/download-card/\${product.itemId}?template=\${template}\`;
+          const cardUrl = apiBaseUrl + '/api/download-card/' + product.itemId + '?template=' + template;
           cardUrls[template] = cardUrl;
           
           // Criar preview
           const previewDiv = document.createElement('div');
           previewDiv.className = 'flex flex-col items-center border rounded-lg p-4';
-          previewDiv.innerHTML = \`
-            <h3 class="font-semibold text-lg mb-2 capitalize">\${template}</h3>
-            <div class="relative overflow-hidden rounded-lg mb-3">
-              <img src="\${cardUrl}" alt="Card \${template}" class="card-preview object-contain">
-            </div>
-            <button class="download-single w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm" data-template="\${template}">
-              Baixar \${template}
-            </button>
-          \`;
+          previewDiv.innerHTML = '<h3 class="font-semibold text-lg mb-2 capitalize">' + template + '</h3>' +
+            '<div class="relative overflow-hidden rounded-lg mb-3">' +
+            '<img src="' + cardUrl + '" alt="Card ' + template + '" class="card-preview object-contain">' +
+            '</div>' +
+            '<button class="download-single w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm" data-template="' + template + '">' +
+            'Baixar ' + template +
+            '</button>';
           
           previewContainer.appendChild(previewDiv);
         } catch (error) {
-          console.error(\`Error generating \${template} card:\`, error);
+          console.error('Error generating ' + template + ' card:', error);
         }
       }
 
@@ -300,15 +298,15 @@ function generateEnhancedDownloadPage(product: any, description: string, apiBase
     
     // Função para baixar um único template
     async function downloadSingleTemplate(template) {
-      updateStatus(30, \`Baixando template \${template}...\`);
+      updateStatus(30, 'Baixando template ' + template + '...');
       
       try {
-        const cardUrl = \`\${apiBaseUrl}/api/download-card/\${product.itemId}?template=\${template}\`;
+        const cardUrl = apiBaseUrl + '/api/download-card/' + product.itemId + '?template=' + template;
         
         // Criar link e disparar download
         const link = document.createElement('a');
         link.href = cardUrl;
-        link.download = \`product_\${product.itemId}_\${template}.png\`;
+        link.download = 'product_' + product.itemId + '_' + template + '.png';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -326,28 +324,23 @@ function generateEnhancedDownloadPage(product: any, description: string, apiBase
         updateStatus(50, 'Preparando download...');
         
         // Criar conteúdo do texto
-        const textContent = \`
-Product: \${product.productName}
-ID: \${product.itemId}
-Price: R$ \${Number(product.price).toFixed(2)}
-\${product.calculatedOriginalPrice ? \`Original Price: R$ \${product.calculatedOriginalPrice}\` : ""}
-\${product.priceDiscountRate ? \`Discount: \${product.priceDiscountRate}%\` : ""}
-Shop: \${product.shopName || "Unknown"}
-Sales: \${product.sales}
-Rating: \${product.ratingStar || "N/A"}
-
-Description:
-\${description}
-
-Link: \${product.offerLink || "N/A"}
-        \`.trim();
+        const textContent = '\\nProduct: ' + product.productName +
+          '\\nID: ' + product.itemId +
+          '\\nPrice: R$ ' + Number(product.price).toFixed(2) +
+          (product.calculatedOriginalPrice ? '\\nOriginal Price: R$ ' + product.calculatedOriginalPrice : '') +
+          (product.priceDiscountRate ? '\\nDiscount: ' + product.priceDiscountRate + '%' : '') +
+          '\\nShop: ' + (product.shopName || 'Unknown') +
+          '\\nSales: ' + product.sales +
+          '\\nRating: ' + (product.ratingStar || 'N/A') +
+          '\\n\\nDescription:\\n' + description +
+          '\\n\\nLink: ' + (product.offerLink || 'N/A');
         
         // Criar blob e link para download
         const blob = new Blob([textContent], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = \`product_\${product.itemId}_description.txt\`;
+        link.download = 'product_' + product.itemId + '_description.txt';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -369,37 +362,32 @@ Link: \${product.offerLink || "N/A"}
         const zip = new JSZip();
         
         // Adicionar arquivo de texto com informações do produto
-        const textContent = \`
-Product: \${product.productName}
-ID: \${product.itemId}
-Price: R$ \${Number(product.price).toFixed(2)}
-\${product.calculatedOriginalPrice ? \`Original Price: R$ \${product.calculatedOriginalPrice}\` : ""}
-\${product.priceDiscountRate ? \`Discount: \${product.priceDiscountRate}%\` : ""}
-Shop: \${product.shopName || "Unknown"}
-Sales: \${product.sales}
-Rating: \${product.ratingStar || "N/A"}
-
-Description:
-\${description}
-
-Link: \${product.offerLink || "N/A"}
-        \`.trim();
+        const textContent = '\\nProduct: ' + product.productName +
+          '\\nID: ' + product.itemId +
+          '\\nPrice: R$ ' + Number(product.price).toFixed(2) +
+          (product.calculatedOriginalPrice ? '\\nOriginal Price: R$ ' + product.calculatedOriginalPrice : '') +
+          (product.priceDiscountRate ? '\\nDiscount: ' + product.priceDiscountRate + '%' : '') +
+          '\\nShop: ' + (product.shopName || 'Unknown') +
+          '\\nSales: ' + product.sales +
+          '\\nRating: ' + (product.ratingStar || 'N/A') +
+          '\\n\\nDescription:\\n' + description +
+          '\\n\\nLink: ' + (product.offerLink || 'N/A');
         
-        zip.file(\`product_\${product.itemId}_info.txt\`, textContent);
+        zip.file('product_' + product.itemId + '_info.txt', textContent);
         
         // Baixar e adicionar cada template
         for (let i = 0; i < templates.length; i++) {
           const template = templates[i];
-          updateStatus(10 + Math.floor(80 * (i / templates.length)), \`Processando template \${template}...\`);
+          updateStatus(10 + Math.floor(80 * (i / templates.length)), 'Processando template ' + template + '...');
           
           try {
-            const cardUrl = \`\${apiBaseUrl}/api/download-card/\${product.itemId}?template=\${template}\`;
+            const cardUrl = apiBaseUrl + '/api/download-card/' + product.itemId + '?template=' + template;
             const response = await fetch(cardUrl);
             const blob = await response.blob();
             
-            zip.file(\`product_\${product.itemId}_\${template}.png\`, blob);
+            zip.file('product_' + product.itemId + '_' + template + '.png', blob);
           } catch (templateError) {
-            console.error(\`Error processing \${template}:\`, templateError);
+            console.error('Error processing ' + template + ':', templateError);
           }
         }
         
@@ -409,7 +397,7 @@ Link: \${product.offerLink || "N/A"}
         const zipBlob = await zip.generateAsync({ type: 'blob' });
         
         // Baixar o ZIP
-        saveAs(zipBlob, \`product_\${product.itemId}_all_templates.zip\`);
+        saveAs(zipBlob, 'product_' + product.itemId + '_all_templates.zip');
         
         updateStatus(100, 'Download concluído!');
       } catch (error) {

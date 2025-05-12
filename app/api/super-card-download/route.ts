@@ -103,7 +103,7 @@ Descrição:
 ${description}
 
 Link: ${selectedProduct.offerLink || "N/A"}
-    `.trim()
+   `.trim()
 
     zip.file("produto_info.txt", productInfo)
 
