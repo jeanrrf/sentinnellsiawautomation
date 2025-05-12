@@ -1,233 +1,132 @@
 /**
- * Serviço de dados para o sistema
- * Este serviço fornece uma interface unificada para acessar dados
+ * Data Service
+ *
+ * Provides a unified interface for data access without using Redis or any persistent cache.
+ * All data is stored in memory and will be lost when the server restarts.
  */
 
 import { createLogger } from "./logger"
-import storageService from "./storage-service"
 
-const logger = createLogger("data-service")
+const logger = createLogger("DataService")
 
-// Interface para opções de busca
-export interface SearchOptions {
-  limit?: number
-  offset?: number
-  sortBy?: string
-  sortOrder?: "asc" | "desc"
-  filter?: Record<string, any>
+// In-memory storage
+const memoryStore: Record<string, any> = {}
+
+/**
+ * Get data from memory store
+ */
+export async function getData(key: string): Promise<any> {
+  logger.debug(`Getting data for key: ${key}`)
+  return memoryStore[key] || null
 }
 
-// Classe de serviço de dados
-class DataService {
-  // Métodos para vídeos
-  async getVideos(options?: SearchOptions) {
-    try {
-      const videos = await storageService.getVideos()
+/**
+ * Set data in memory store
+ */
+export async function setData(key: string, data: any): Promise<void> {
+  logger.debug(`Setting data for key: ${key}`)
+  memoryStore[key] = data
+}
 
-      // Aplicar filtros se fornecidos
-      let filteredVideos = [...videos]
-      if (options?.filter) {
-        Object.entries(options.filter).forEach(([key, value]) => {
-          filteredVideos = filteredVideos.filter((video) => video[key] === value)
-        })
-      }
+/**
+ * Delete data from memory store
+ */
+export async function deleteData(key: string): Promise<void> {
+  logger.debug(`Deleting data for key: ${key}`)
+  delete memoryStore[key]
+}
 
-      // Aplicar ordenação se fornecida
-      if (options?.sortBy) {
-        filteredVideos.sort((a, b) => {
-          const aValue = a[options.sortBy]
-          const bValue = b[options.sortBy]
+/**
+ * Check if key exists in memory store
+ */
+export async function hasData(key: string): Promise<boolean> {
+  return key in memoryStore
+}
 
-          if (aValue < bValue) return options.sortOrder === "desc" ? 1 : -1
-          if (aValue > bValue) return options.sortOrder === "desc" ? -1 : 1
-          return 0
-        })
-      }
+/**
+ * Get all keys in memory store
+ */
+export async function getAllKeys(): Promise<string[]> {
+  return Object.keys(memoryStore)
+}
 
-      // Aplicar paginação se fornecida
-      if (options?.offset !== undefined || options?.limit !== undefined) {
-        const offset = options.offset || 0
-        const limit = options.limit || filteredVideos.length
-        filteredVideos = filteredVideos.slice(offset, offset + limit)
-      }
+/**
+ * Clear all data in memory store
+ */
+export async function clearAllData(): Promise<void> {
+  logger.warn("Clearing all data from memory store")
+  Object.keys(memoryStore).forEach((key) => {
+    delete memoryStore[key]
+  })
+}
 
-      return filteredVideos
-    } catch (error) {
-      logger.error("Erro ao buscar vídeos:", error)
-      throw error
-    }
-  }
+/**
+ * Get videos from memory store
+ */
+export async function getVideos(): Promise<any[]> {
+  return (await getData("videos")) || []
+}
 
-  async getVideoById(id: string) {
-    try {
-      const videos = await storageService.getVideos()
-      return videos.find((video) => video.id === id)
-    } catch (error) {
-      logger.error(`Erro ao buscar vídeo ${id}:`, error)
-      throw error
-    }
-  }
+/**
+ * Get published videos from memory store
+ */
+export async function getPublishedVideos(): Promise<any[]> {
+  return (await getData("published_videos")) || []
+}
 
-  async saveVideo(videoData: any) {
-    try {
-      await storageService.saveVideo(videoData)
-      return videoData
-    } catch (error) {
-      logger.error("Erro ao salvar vídeo:", error)
-      throw error
-    }
-  }
+/**
+ * Get products from memory store
+ */
+export async function getProducts(): Promise<any[]> {
+  return (await getData("products")) || []
+}
 
-  async deleteVideo(id: string) {
-    try {
-      await storageService.deleteVideo(id)
-      return true
-    } catch (error) {
-      logger.error(`Erro ao excluir vídeo ${id}:`, error)
-      throw error
-    }
-  }
+/**
+ * Get schedules from memory store
+ */
+export async function getSchedules(): Promise<any[]> {
+  return (await getData("schedules")) || []
+}
 
-  // Métodos para produtos
-  async getProducts(options?: SearchOptions) {
-    try {
-      const products = await storageService.getProducts()
+/**
+ * Get execution history from memory store
+ */
+export async function getExecutionHistory(): Promise<any[]> {
+  return (await getData("execution_history")) || []
+}
 
-      // Aplicar filtros se fornecidos
-      let filteredProducts = [...products]
-      if (options?.filter) {
-        Object.entries(options.filter).forEach(([key, value]) => {
-          filteredProducts = filteredProducts.filter((product) => product[key] === value)
-        })
-      }
+/**
+ * Check if ID has been processed
+ */
+export async function isIdProcessed(id: string): Promise<boolean> {
+  const processedIds = (await getData("processed_ids")) || []
+  return processedIds.includes(id)
+}
 
-      // Aplicar ordenação se fornecida
-      if (options?.sortBy) {
-        filteredProducts.sort((a, b) => {
-          const aValue = a[options.sortBy]
-          const bValue = b[options.sortBy]
-
-          if (aValue < bValue) return options.sortOrder === "desc" ? 1 : -1
-          if (aValue > bValue) return options.sortOrder === "desc" ? -1 : 1
-          return 0
-        })
-      }
-
-      // Aplicar paginação se fornecida
-      if (options?.offset !== undefined || options?.limit !== undefined) {
-        const offset = options.offset || 0
-        const limit = options.limit || filteredProducts.length
-        filteredProducts = filteredProducts.slice(offset, offset + limit)
-      }
-
-      return filteredProducts
-    } catch (error) {
-      logger.error("Erro ao buscar produtos:", error)
-      throw error
-    }
-  }
-
-  async getProductById(id: string) {
-    try {
-      const products = await storageService.getProducts()
-      return products.find((product) => product.itemId === id)
-    } catch (error) {
-      logger.error(`Erro ao buscar produto ${id}:`, error)
-      throw error
-    }
-  }
-
-  // Métodos para agendamentos
-  async getSchedules(options?: SearchOptions) {
-    try {
-      const schedules = await storageService.getSchedules()
-
-      // Aplicar filtros se fornecidos
-      let filteredSchedules = [...schedules]
-      if (options?.filter) {
-        Object.entries(options.filter).forEach(([key, value]) => {
-          filteredSchedules = filteredSchedules.filter((schedule) => schedule[key] === value)
-        })
-      }
-
-      // Aplicar ordenação se fornecida
-      if (options?.sortBy) {
-        filteredSchedules.sort((a, b) => {
-          const aValue = a[options.sortBy]
-          const bValue = b[options.sortBy]
-
-          if (aValue < bValue) return options.sortOrder === "desc" ? 1 : -1
-          if (aValue > bValue) return options.sortOrder === "desc" ? -1 : 1
-          return 0
-        })
-      }
-
-      // Aplicar paginação se fornecida
-      if (options?.offset !== undefined || options?.limit !== undefined) {
-        const offset = options.offset || 0
-        const limit = options.limit || filteredSchedules.length
-        filteredSchedules = filteredSchedules.slice(offset, offset + limit)
-      }
-
-      return filteredSchedules
-    } catch (error) {
-      logger.error("Erro ao buscar agendamentos:", error)
-      throw error
-    }
-  }
-
-  async getScheduleById(id: string) {
-    try {
-      const schedules = await storageService.getSchedules()
-      return schedules.find((schedule) => schedule.id === id)
-    } catch (error) {
-      logger.error(`Erro ao buscar agendamento ${id}:`, error)
-      throw error
-    }
-  }
-
-  async saveSchedule(scheduleData: any) {
-    try {
-      await storageService.saveSchedule(scheduleData)
-      return scheduleData
-    } catch (error) {
-      logger.error("Erro ao salvar agendamento:", error)
-      throw error
-    }
-  }
-
-  async deleteSchedule(id: string) {
-    try {
-      await storageService.deleteSchedule(id)
-      return true
-    } catch (error) {
-      logger.error(`Erro ao excluir agendamento ${id}:`, error)
-      throw error
-    }
-  }
-
-  // Métodos para descrições
-  async getDescription(productId: string) {
-    try {
-      return await storageService.getDescription(productId)
-    } catch (error) {
-      logger.error(`Erro ao buscar descrição para produto ${productId}:`, error)
-      throw error
-    }
-  }
-
-  async saveDescription(productId: string, description: string) {
-    try {
-      await storageService.saveDescription(productId, description)
-      return description
-    } catch (error) {
-      logger.error(`Erro ao salvar descrição para produto ${productId}:`, error)
-      throw error
-    }
+/**
+ * Add processed ID
+ */
+export async function addProcessedId(id: string): Promise<void> {
+  const processedIds = (await getData("processed_ids")) || []
+  if (!processedIds.includes(id)) {
+    processedIds.push(id)
+    await setData("processed_ids", processedIds)
   }
 }
 
-// Instância única do serviço de dados
-const dataService = new DataService()
+/**
+ * Get description for product
+ */
+export async function getDescription(productId: string): Promise<string | null> {
+  const descriptions = (await getData("descriptions")) || {}
+  return descriptions[productId] || null
+}
 
-export default dataService
+/**
+ * Set description for product
+ */
+export async function setDescription(productId: string, description: string): Promise<void> {
+  const descriptions = (await getData("descriptions")) || {}
+  descriptions[productId] = description
+  await setData("descriptions", descriptions)
+}

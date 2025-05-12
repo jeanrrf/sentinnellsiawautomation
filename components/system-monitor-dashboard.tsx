@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -11,8 +10,6 @@ import { Loader2, RefreshCw, Database, HardDrive, Server, AlertTriangle, CheckCi
 
 export function SystemMonitorDashboard() {
   const [isLoading, setIsLoading] = useState(true)
-  const [redisStatus, setRedisStatus] = useState<any>(null)
-  const [blobStatus, setBlobStatus] = useState<any>(null)
   const [systemStatus, setSystemStatus] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -21,23 +18,11 @@ export function SystemMonitorDashboard() {
     setError(null)
 
     try {
-      // Fetch Redis status
-      const redisResponse = await fetch("/api/redis-status")
-      if (!redisResponse.ok) throw new Error("Falha ao buscar status do Redis")
-      const redisData = await redisResponse.json()
-
-      // Fetch Blob storage status
-      const blobResponse = await fetch("/api/blob-status")
-      if (!blobResponse.ok) throw new Error("Falha ao buscar status do armazenamento Blob")
-      const blobData = await blobResponse.json()
-
       // Fetch general system status
       const systemResponse = await fetch("/api/system-status")
       if (!systemResponse.ok) throw new Error("Falha ao buscar status do sistema")
       const systemData = await systemResponse.json()
 
-      setRedisStatus(redisData)
-      setBlobStatus(blobData)
       setSystemStatus(systemData)
     } catch (err: any) {
       console.error("Erro ao buscar status do sistema:", err)
@@ -56,44 +41,26 @@ export function SystemMonitorDashboard() {
   }, [])
 
   // Mock data for demonstration
-  const mockRedisStatus = {
-    connected: true,
-    memoryUsage: {
-      used: 24,
-      total: 100,
-      percentage: 24,
-    },
-    operations: {
-      reads: 1250,
-      writes: 345,
-      deletes: 67,
-    },
-    keys: 432,
-    uptime: "3d 12h 45m",
-  }
-
-  const mockBlobStatus = {
-    connected: true,
-    storage: {
-      used: 256,
-      total: 1024,
-      percentage: 25,
-    },
-    files: {
-      total: 128,
-      images: 87,
-      videos: 23,
-      other: 18,
-    },
-    recentUploads: 12,
-  }
-
   const mockSystemStatus = {
     healthy: true,
     services: {
-      api: "healthy",
-      scheduler: "healthy",
-      worker: "healthy",
+      api: {
+        status: "healthy",
+        uptime: 3600,
+      },
+      storage: {
+        status: "healthy",
+        type: "local",
+        note: "Usando armazenamento local",
+      },
+    },
+    system: {
+      platform: "browser",
+      nodeVersion: "v18.x",
+      memory: {
+        free: 1024 * 1024 * 100,
+        total: 1024 * 1024 * 512,
+      },
     },
     lastScheduledRun: "2023-05-10T15:30:00Z",
     pendingJobs: 3,
@@ -101,8 +68,6 @@ export function SystemMonitorDashboard() {
   }
 
   // Use mock data if real data is not available
-  const redis = redisStatus || mockRedisStatus
-  const blob = blobStatus || mockBlobStatus
   const system = systemStatus || mockSystemStatus
 
   return (
@@ -129,41 +94,27 @@ export function SystemMonitorDashboard() {
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg flex items-center">
                 <Database className="h-5 w-5 text-primary mr-2" />
-                Redis
+                Armazenamento
               </CardTitle>
-              <Badge variant={redis.connected ? "default" : "destructive"}>
-                {redis.connected ? "Conectado" : "Desconectado"}
-              </Badge>
+              <Badge variant="outline">Local</Badge>
             </div>
-            <CardDescription>Cache e armazenamento temporário</CardDescription>
+            <CardDescription>Armazenamento temporário</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Uso de Memória</span>
-                  <span>{redis.memoryUsage.percentage}%</span>
-                </div>
-                <Progress value={redis.memoryUsage.percentage} className="h-2" />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{redis.operations.reads}</span>
-                  <span className="text-xs text-muted-foreground">Leituras</span>
-                </div>
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{redis.operations.writes}</span>
-                  <span className="text-xs text-muted-foreground">Escritas</span>
-                </div>
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{redis.keys}</span>
-                  <span className="text-xs text-muted-foreground">Chaves</span>
+                  <span>Status</span>
+                  <span>Temporário (não persistente)</span>
                 </div>
               </div>
 
               <div className="text-sm">
-                <span className="text-muted-foreground">Uptime:</span> {redis.uptime}
+                <span className="text-muted-foreground">Tipo:</span> Memória local
+              </div>
+
+              <div className="text-sm">
+                <span className="text-muted-foreground">Persistência:</span> Nenhuma
               </div>
             </div>
           </CardContent>
@@ -174,11 +125,9 @@ export function SystemMonitorDashboard() {
             <div className="flex justify-between items-center">
               <CardTitle className="text-lg flex items-center">
                 <HardDrive className="h-5 w-5 text-primary mr-2" />
-                Blob Storage
+                Arquivos
               </CardTitle>
-              <Badge variant={blob.connected ? "default" : "destructive"}>
-                {blob.connected ? "Conectado" : "Desconectado"}
-              </Badge>
+              <Badge variant="outline">Local</Badge>
             </div>
             <CardDescription>Armazenamento de arquivos</CardDescription>
           </CardHeader>
@@ -186,38 +135,17 @@ export function SystemMonitorDashboard() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span>Uso de Armazenamento</span>
-                  <span>
-                    {blob.storage.used} MB / {blob.storage.total} MB ({blob.storage.percentage}%)
-                  </span>
-                </div>
-                <Progress value={blob.storage.percentage} className="h-2" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{blob.files.total}</span>
-                  <span className="text-xs text-muted-foreground">Arquivos Totais</span>
-                </div>
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{blob.recentUploads}</span>
-                  <span className="text-xs text-muted-foreground">Uploads Recentes</span>
+                  <span>Status</span>
+                  <span>Temporário (não persistente)</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{blob.files.images}</span>
-                  <span className="text-xs text-muted-foreground">Imagens</span>
-                </div>
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{blob.files.videos}</span>
-                  <span className="text-xs text-muted-foreground">Vídeos</span>
-                </div>
-                <div className="flex flex-col items-center p-2 bg-muted rounded-md">
-                  <span className="font-medium">{blob.files.other}</span>
-                  <span className="text-xs text-muted-foreground">Outros</span>
-                </div>
+              <div className="text-sm">
+                <span className="text-muted-foreground">Tipo:</span> Armazenamento local
+              </div>
+
+              <div className="text-sm">
+                <span className="text-muted-foreground">Persistência:</span> Apenas durante a sessão
               </div>
             </div>
           </CardContent>
@@ -240,26 +168,18 @@ export function SystemMonitorDashboard() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <div className="text-sm font-medium">Status dos Serviços</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
                     <span className="text-xs">API</span>
-                    {system.services.api === "healthy" ? (
+                    {system.services.api.status === "healthy" ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
                     )}
                   </div>
                   <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                    <span className="text-xs">Scheduler</span>
-                    {system.services.scheduler === "healthy" ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between p-2 bg-muted rounded-md">
-                    <span className="text-xs">Worker</span>
-                    {system.services.worker === "healthy" ? (
+                    <span className="text-xs">Armazenamento</span>
+                    {system.services.storage.status === "healthy" ? (
                       <CheckCircle className="h-4 w-4 text-green-500" />
                     ) : (
                       <AlertTriangle className="h-4 w-4 text-amber-500" />

@@ -1,154 +1,81 @@
 /**
- * Arquivo de compatibilidade para Redis
- * Este arquivo fornece implementações vazias para as funções que eram fornecidas pelo Redis
- * Ele existe apenas para satisfazer as importações existentes no código
+ * Redis compatibility layer
+ *
+ * This file provides empty implementations of Redis functions
+ * to maintain compatibility with existing code while Redis has been removed.
  */
 
 import { createLogger } from "./logger"
 
-const logger = createLogger("redis-compatibility")
+const logger = createLogger("RedisCompat")
 
-// Constantes para as chaves do cache (mantidas para compatibilidade)
-export const CACHE_KEYS = {
-  PRODUCTS: "shopee:products",
-  PRODUCT_PREFIX: "shopee:product:",
-  DESCRIPTION_PREFIX: "shopee:description:",
-  PROCESSED_IDS: "shopee:processed_ids",
-  CARDS: "shopee:cards",
-  CARD_PREFIX: "shopee:card:",
-  PUBLISHED_CARDS: "shopee:published_cards",
-  EXCLUDED_PRODUCTS: "shopee:excluded_products",
-  VIDEOS: "shopee:videos",
-  VIDEO_PREFIX: "shopee:video:",
-  SCHEDULES: "schedules",
-  SCHEDULE_HISTORY: "execution_history",
-}
-
-// Cliente Redis simulado que não faz nada
+// Mock Redis client
 const mockRedisClient = {
-  // Métodos básicos para compatibilidade
-  get: async (key: string) => {
-    logger.debug(`[MOCK] GET ${key}`)
-    return null
-  },
-  set: async (key: string, value: any, options?: any) => {
-    logger.debug(`[MOCK] SET ${key}`)
-    return "OK"
-  },
-  del: async (key: string) => {
-    logger.debug(`[MOCK] DEL ${key}`)
-    return 1
-  },
-  exists: async (key: string) => {
-    logger.debug(`[MOCK] EXISTS ${key}`)
-    return 0
-  },
-  keys: async (pattern: string) => {
-    logger.debug(`[MOCK] KEYS ${pattern}`)
-    return []
-  },
-  // Métodos para conjuntos
-  sadd: async (key: string, value: string) => {
-    logger.debug(`[MOCK] SADD ${key} ${value}`)
-    return 1
-  },
-  srem: async (key: string, value: string) => {
-    logger.debug(`[MOCK] SREM ${key} ${value}`)
-    return 1
-  },
-  smembers: async (key: string) => {
-    logger.debug(`[MOCK] SMEMBERS ${key}`)
-    return []
-  },
-  scard: async (key: string) => {
-    logger.debug(`[MOCK] SCARD ${key}`)
-    return 0
-  },
-  sismember: async (key: string, value: string) => {
-    logger.debug(`[MOCK] SISMEMBER ${key} ${value}`)
-    return 0
-  },
-  // Métodos para hashes
-  hget: async (hash: string, key: string) => {
-    logger.debug(`[MOCK] HGET ${hash} ${key}`)
-    return null
-  },
-  hset: async (hash: string, key: string, value: any) => {
-    logger.debug(`[MOCK] HSET ${hash} ${key}`)
-    return 1
-  },
-  hdel: async (hash: string, key: string) => {
-    logger.debug(`[MOCK] HDEL ${hash} ${key}`)
-    return 1
-  },
-  // Outros métodos
-  info: async () => {
-    return "mock redis info"
-  },
-  ping: async () => {
-    return "PONG"
-  },
-  pipeline: () => {
-    return {
-      get: () => this,
-      set: () => this,
-      exec: async () => [],
-    }
-  },
+  get: async () => null,
+  set: async () => "OK",
+  del: async () => 1,
+  exists: async () => 0,
+  keys: async () => [],
+  hget: async () => null,
+  hset: async () => "OK",
+  hgetall: async () => ({}),
+  sadd: async () => 1,
+  sismember: async () => 0,
+  smembers: async () => [],
+  expire: async () => 1,
 }
 
-/**
- * Função para obter o cliente Redis (mantida para compatibilidade)
- * Esta função agora retorna um cliente simulado que não faz nada
- */
-export async function getRedisClient() {
-  logger.warn("getRedisClient foi chamado, mas o Redis foi removido do sistema")
+// Cache keys
+export const CACHE_KEYS = {
+  PRODUCTS: "products",
+  VIDEOS: "videos",
+  PUBLISHED_VIDEOS: "published_videos",
+  PROCESSED_IDS: "processed_ids",
+  DESCRIPTIONS: "descriptions",
+}
+
+// Get Redis client (returns mock client)
+export function getRedisClient() {
+  logger.warn("Redis has been removed. Using mock implementation.")
   return mockRedisClient
 }
 
-// Funções de compatibilidade que retornam valores vazios
+// Get videos from cache (returns empty array)
 export async function getVideos() {
-  logger.warn("getVideos foi chamado, mas o Redis foi removido do sistema")
+  logger.warn("Redis has been removed. getVideos returning empty array.")
   return []
 }
 
-export async function saveVideo(videoData: any) {
-  logger.warn("saveVideo foi chamado, mas o Redis foi removido do sistema")
+// Get published videos from cache (returns empty array)
+export async function getPublishedVideos() {
+  logger.warn("Redis has been removed. getPublishedVideos returning empty array.")
+  return []
+}
+
+// Get cached products (returns null)
+export async function getCachedProducts() {
+  logger.warn("Redis has been removed. getCachedProducts returning null.")
   return null
 }
 
-export async function getPublishedVideos() {
-  logger.warn("getPublishedVideos foi chamado, mas o Redis foi removido do sistema")
-  return []
-}
-
-export async function getCachedProducts() {
-  logger.warn("getCachedProducts foi chamado, mas o Redis foi removido do sistema")
-  return []
-}
-
-export async function isIdProcessed(productId: string): Promise<boolean> {
-  logger.warn("isIdProcessed foi chamado, mas o Redis foi removido do sistema")
+// Check if ID is processed (returns false)
+export async function isIdProcessed(id: string) {
+  logger.warn(`Redis has been removed. isIdProcessed returning false for id: ${id}`)
   return false
 }
 
-export async function addProcessedId(productId: string): Promise<void> {
-  logger.warn("addProcessedId foi chamado, mas o Redis foi removido do sistema")
+// Add processed ID (does nothing)
+export async function addProcessedId(id: string) {
+  logger.warn(`Redis has been removed. addProcessedId doing nothing for id: ${id}`)
+  return true
 }
 
-export async function getCachedDescription(productId: string): Promise<string | null> {
-  logger.warn("getCachedDescription foi chamado, mas o Redis foi removido do sistema")
+// Get cached description (returns null)
+export async function getCachedDescription(productId: string) {
+  logger.warn(`Redis has been removed. getCachedDescription returning null for productId: ${productId}`)
   return null
 }
 
-export async function publishVideo(productId: string): Promise<void> {
-  logger.warn("publishVideo foi chamado, mas o Redis foi removido do sistema")
-}
-
-export async function cleanupCache(): Promise<void> {
-  logger.warn("cleanupCache foi chamado, mas o Redis foi removido do sistema")
-}
-
-// Exportação padrão para compatibilidade
+// Default export (mock Redis client)
 const redis = mockRedisClient
 export default redis

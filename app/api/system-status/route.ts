@@ -1,52 +1,53 @@
 import { NextResponse } from "next/server"
-import { createLogger } from "@/lib/logger"
 import os from "os"
-
-const logger = createLogger("API:SystemStatus")
 
 export async function GET() {
   try {
-    // Coletar informações do sistema
-    const systemInfo = {
-      platform: process.platform,
-      nodeVersion: process.version,
-      uptime: process.uptime(),
-      memory: {
-        total: os.totalmem(),
-        free: os.freemem(),
-        usage: (1 - os.freemem() / os.totalmem()) * 100,
+    // Get system information
+    const platform = os.platform()
+    const nodeVersion = process.version
+    const totalMemory = os.totalmem()
+    const freeMemory = os.freemem()
+
+    // Get uptime in seconds
+    const uptime = process.uptime()
+
+    // Mock data for services
+    const apiStatus = "healthy"
+    const storageStatus = "healthy"
+
+    // Create response object
+    const systemStatus = {
+      healthy: true,
+      services: {
+        api: {
+          status: apiStatus,
+          uptime: Math.floor(uptime),
+        },
+        storage: {
+          status: storageStatus,
+          type: "local",
+          note: "Usando armazenamento local (não persistente)",
+        },
       },
-      cpu: os.cpus(),
-      loadAvg: os.loadavg(),
+      system: {
+        platform,
+        nodeVersion,
+        memory: {
+          total: totalMemory,
+          free: freeMemory,
+          used: totalMemory - freeMemory,
+          percentage: Math.round(((totalMemory - freeMemory) / totalMemory) * 100),
+        },
+      },
+      lastScheduledRun: new Date(Date.now() - 86400000).toISOString(),
+      pendingJobs: 0,
+      completedJobs: 0,
     }
 
-    // Verificar status dos serviços
-    const services = {
-      api: {
-        status: "healthy",
-        uptime: process.uptime(),
-      },
-      storage: {
-        status: "healthy",
-        type: "temporary",
-        note: "Armazenamento temporário em memória (não persistente)",
-      },
-    }
-
-    return NextResponse.json({
-      success: true,
-      timestamp: new Date().toISOString(),
-      system: systemInfo,
-      services,
-    })
-  } catch (error: any) {
-    logger.error("Erro ao obter status do sistema:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Falha ao obter status do sistema: ${error.message}`,
-      },
-      { status: 500 },
-    )
+    return NextResponse.json(systemStatus)
+  } catch (error) {
+    console.error("Error getting system status:", error)
+    return NextResponse.json({ error: "Failed to get system status" }, { status: 500 })
   }
 }
