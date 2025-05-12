@@ -1,134 +1,186 @@
+import { Redis } from "@upstash/redis"
 import { createLogger } from "./logger"
 
-// Cache keys
+const logger = createLogger("Redis")
+
+let redisClient: Redis | null = null
+
 export const CACHE_KEYS = {
   PRODUCTS: "products",
   VIDEOS: "videos",
   PUBLISHED_VIDEOS: "published_videos",
   PROCESSED_IDS: "processed_ids",
   DESCRIPTIONS: "descriptions",
+  SCHEDULES: "schedules",
+  EXECUTION_HISTORY: "execution_history",
+  DESCRIPTION_PREFIX: "product_description:",
+  VIDEO_PREFIX: "video:",
 }
 
-const logger = createLogger("Redis")
+export async function getRedisClient(): Promise<Redis | null> {
+  if (redisClient) {
+    return redisClient
+  }
 
-// Mock Redis client para desenvolvimento
-const mockRedisClient = {
-  get: async (key: string) => {
-    logger.debug(`[MOCK] Redis GET: ${key}`)
+  try {
+    // Verificar se as variáveis de ambiente estão definidas
+    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+      logger.warn("Redis environment variables are not set")
+      return null
+    }
+
+    // Criar cliente Redis
+    redisClient = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+
+    // Testar conexão
+    await redisClient.ping()
+    logger.info("Redis client initialized successfully")
+
+    return redisClient
+  } catch (error) {
+    logger.error("Failed to initialize Redis client:", error)
+    redisClient = null
     return null
-  },
-  set: async (key: string, value: any, options?: any) => {
-    logger.debug(`[MOCK] Redis SET: ${key}`)
-    return "OK"
-  },
-  del: async (key: string) => {
-    logger.debug(`[MOCK] Redis DEL: ${key}`)
-    return 1
-  },
-  exists: async (key: string) => {
-    logger.debug(`[MOCK] Redis EXISTS: ${key}`)
-    return 0
-  },
-  keys: async (pattern: string) => {
-    logger.debug(`[MOCK] Redis KEYS: ${pattern}`)
-    return []
-  },
-  hget: async (key: string, field: string) => {
-    logger.debug(`[MOCK] Redis HGET: ${key} ${field}`)
-    return null
-  },
-  hset: async (key: string, field: string, value: any) => {
-    logger.debug(`[MOCK] Redis HSET: ${key} ${field}`)
-    return 1
-  },
-  hgetall: async (key: string) => {
-    logger.debug(`[MOCK] Redis HGETALL: ${key}`)
-    return {}
-  },
-  sadd: async (key: string, ...members: string[]) => {
-    logger.debug(`[MOCK] Redis SADD: ${key}`)
-    return members.length
-  },
-  sismember: async (key: string, member: string) => {
-    logger.debug(`[MOCK] Redis SISMEMBER: ${key} ${member}`)
-    return 0
-  },
-  smembers: async (key: string) => {
-    logger.debug(`[MOCK] Redis SMEMBERS: ${key}`)
-    return []
-  },
-  expire: async (key: string, seconds: number) => {
-    logger.debug(`[MOCK] Redis EXPIRE: ${key} ${seconds}s`)
-    return 1
-  },
+  }
 }
 
-/**
- * Obtém uma instância do cliente Redis
- * @returns Cliente Redis configurado
- */
-export function getRedisClient() {
-  logger.info("Usando cliente Redis mock para desenvolvimento")
-  return mockRedisClient
-}
-
-/**
- * Obtém a lista de vídeos do cache
- * @returns Array de vídeos ou array vazio se não encontrado
- */
-export async function getVideos(): Promise<any[]> {
-  logger.info("Obtendo vídeos do cache (mock)")
-  return []
-}
-
-/**
- * Obtém a lista de vídeos publicados do cache
- * @returns Array de vídeos publicados ou array vazio se não encontrado
- */
-export async function getPublishedVideos(): Promise<any[]> {
-  logger.info("Obtendo vídeos publicados do cache (mock)")
-  return []
-}
-
-/**
- * Obtém produtos em cache
- * @returns Produtos em cache ou null se não encontrado
- */
+// Função para obter produtos em cache
 export async function getCachedProducts(): Promise<any | null> {
-  logger.info("Obtendo produtos do cache (mock)")
-  return null
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, returning null for cached products")
+      return null
+    }
+
+    const productsJson = await redis.get(CACHE_KEYS.PRODUCTS)
+
+    if (!productsJson) {
+      logger.warn("No products found in cache")
+      return null
+    }
+
+    return JSON.parse(productsJson as string)
+  } catch (error) {
+    logger.error("Error getting cached products:", error)
+    return null
+  }
 }
 
-/**
- * Verifica se um ID já foi processado
- * @param id ID a verificar
- * @returns Booleano indicando se o ID foi processado
- */
+// Função para obter vídeos em cache
+export async function getVideos(): Promise<any[]> {
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, returning empty videos array")
+      return []
+    }
+
+    const videosJson = await redis.get(CACHE_KEYS.VIDEOS)
+
+    if (!videosJson) {
+      logger.warn("No videos found in cache")
+      return []
+    }
+
+    return JSON.parse(videosJson as string)
+  } catch (error) {
+    logger.error("Error getting cached videos:", error)
+    return []
+  }
+}
+
+// Função para obter vídeos publicados em cache
+export async function getPublishedVideos(): Promise<any[]> {
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, returning empty published videos array")
+      return []
+    }
+
+    const videosJson = await redis.get(CACHE_KEYS.PUBLISHED_VIDEOS)
+
+    if (!videosJson) {
+      logger.warn("No published videos found in cache")
+      return []
+    }
+
+    return JSON.parse(videosJson as string)
+  } catch (error) {
+    logger.error("Error getting cached published videos:", error)
+    return []
+  }
+}
+
+// Função para verificar se o ID já foi processado
 export async function isIdProcessed(id: string): Promise<boolean> {
-  logger.info(`Verificando se ID ${id} foi processado (mock)`)
-  return false
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, returning false for isIdProcessed")
+      return false
+    }
+
+    const processed = await redis.sismember(CACHE_KEYS.PROCESSED_IDS, id)
+    return processed === 1
+  } catch (error) {
+    logger.error(`Error checking if ID ${id} is processed:`, error)
+    return false
+  }
 }
 
-/**
- * Adiciona um ID à lista de IDs processados
- * @param id ID a adicionar
- * @returns Booleano indicando sucesso
- */
-export async function addProcessedId(id: string): Promise<boolean> {
-  logger.info(`Adicionando ID ${id} à lista de processados (mock)`)
-  return true
+// Função para adicionar o ID aos processados
+export async function addProcessedId(id: string): Promise<void> {
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, cannot add processed ID")
+      return
+    }
+
+    await redis.sadd(CACHE_KEYS.PROCESSED_IDS, id)
+    logger.info(`Added ID ${id} to processed IDs`)
+  } catch (error) {
+    logger.error(`Error adding ID ${id} to processed IDs:`, error)
+  }
 }
 
-/**
- * Obtém descrição em cache para um produto
- * @param productId ID do produto
- * @returns Descrição em cache ou null se não encontrada
- */
+// Função para obter a descrição em cache
 export async function getCachedDescription(productId: string): Promise<string | null> {
-  logger.info(`Obtendo descrição em cache para produto ${productId} (mock)`)
-  return null
+  try {
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      logger.warn("Redis client not available, cannot get cached description")
+      return null
+    }
+
+    const description = await redis.get(`${CACHE_KEYS.DESCRIPTION_PREFIX}${productId}`)
+    return description as string | null
+  } catch (error) {
+    logger.error(`Error getting cached description for product ${productId}:`, error)
+    return null
+  }
 }
 
-// Exportação padrão do cliente Redis
-const redis = mockRedisClient
+const redis = {
+  getVideos,
+  getPublishedVideos,
+  isIdProcessed,
+  addProcessedId,
+  getCachedDescription,
+  getCachedProducts,
+  getRedisClient,
+  CACHE_KEYS,
+}
+
 export default redis

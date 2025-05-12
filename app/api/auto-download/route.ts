@@ -334,6 +334,11 @@ Link: ${product.offerLink || "N/A"}
       max-height: 200px;
       overflow-y: auto;
     }
+    .preview-iframe {
+      width: 100%;
+      height: 600px;
+      border: none;
+    }
     @media (max-width: 768px) {
       .card-preview {
         min-width: 100%;
@@ -420,8 +425,15 @@ Link: ${product.offerLink || "N/A"}
     const ageminiPreview = document.getElementById('ageminiPreview');
     
     // Set up previews
-    modernPreview.innerHTML = '<iframe srcdoc="' + modernTemplate.replace(/"/g, '&quot;') + '" style="width: 100%; height: 600px; border: none;"></iframe>';
-    ageminiPreview.innerHTML = '<iframe srcdoc="' + ageminiTemplate.replace(/"/g, '&quot;') + '" style="width: 100%; height: 600px; border: none;"></iframe>';
+    const modernIframe = document.createElement('iframe');
+    modernIframe.className = 'preview-iframe';
+    modernIframe.srcdoc = modernTemplate.replace(/"/g, '&quot;');
+    modernPreview.appendChild(modernIframe);
+    
+    const ageminiIframe = document.createElement('iframe');
+    ageminiIframe.className = 'preview-iframe';
+    ageminiIframe.srcdoc = ageminiTemplate.replace(/"/g, '&quot;');
+    ageminiPreview.appendChild(ageminiIframe);
     
     // Helper functions
     function updateStatus(message, type = 'info') {
@@ -475,10 +487,6 @@ Link: ${product.offerLink || "N/A"}
         
         // Create a new JSZip instance
         const zip = new JSZip();
-        
-        // Get the iframe elements
-        const modernIframe = modernPreview.querySelector('iframe');
-        const ageminiIframe = ageminiPreview.querySelector('iframe');
         
         updateProgress(20);
         updateStatus('Capturando template moderno...', 'info');
@@ -585,13 +593,11 @@ Link: ${product.offerLink || "N/A"}
     downloadAllButton.addEventListener('click', downloadAllFiles);
     
     downloadModernButton.addEventListener('click', () => {
-      const iframe = modernPreview.querySelector('iframe');
-      downloadSingleTemplate(iframe, 'product_${product.itemId}_modern.png');
+      downloadSingleTemplate(modernIframe, 'product_${product.itemId}_modern.png');
     });
     
     downloadAgeminiButton.addEventListener('click', () => {
-      const iframe = ageminiPreview.querySelector('iframe');
-      downloadSingleTemplate(iframe, 'product_${product.itemId}_agemini.png');
+      downloadSingleTemplate(ageminiIframe, 'product_${product.itemId}_agemini.png');
     });
     
     downloadTextButton.addEventListener('click', downloadTextFile);
