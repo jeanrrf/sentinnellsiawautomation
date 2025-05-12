@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createLogger, ErrorCodes } from "@/lib/logger"
-import crypto from "crypto"
+import { createHash } from "crypto-browserify"
 import storageService from "@/lib/storage-service"
 
 const logger = createLogger("api-products")
@@ -13,7 +13,7 @@ const SHOPEE_AFFILIATE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL
 // Função para gerar a assinatura para autenticação com a API da Shopee
 function generateSignature(appId: string, timestamp: number, payload: string, secret: string) {
   const baseString = `${appId}${timestamp}${payload}${secret}`
-  return crypto.createHash("sha256").update(baseString).digest("hex")
+  return createHash("sha256").update(baseString).digest("hex")
 }
 
 export async function GET(request: Request) {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import crypto from "crypto"
+import { createHash } from "crypto-browserify"
 
 // Shopee API credentials from environment variables
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID
@@ -8,7 +8,7 @@ const SHOPEE_AFFILIATE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL
 
 function generateSignature(appId: string, timestamp: number, payload: string, secret: string) {
   const baseString = `${appId}${timestamp}${payload}${secret}`
-  return crypto.createHash("sha256").update(baseString).digest("hex")
+  return createHash("sha256").update(baseString).digest("hex")
 }
 
 export async function GET() {

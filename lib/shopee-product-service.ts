@@ -1,5 +1,5 @@
 import { createLogger } from "@/lib/logger"
-import crypto from "crypto"
+import { createHash } from "crypto-browserify"
 
 const logger = createLogger("shopee-product-service")
 
@@ -51,7 +51,7 @@ class ShopeeProductService implements ShopeeService {
    */
   private generateSignature(timestamp: number, payload: string): string {
     const baseString = `${this.appId}${timestamp}${payload}${this.appSecret}`
-    return crypto.createHash("sha256").update(baseString).digest("hex")
+    return createHash("sha256").update(baseString).digest("hex")
   }
 
   /**
