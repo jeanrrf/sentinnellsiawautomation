@@ -91,148 +91,34 @@ function generateCardHtml(product: any, description: string) {
   const hasDiscount = discountRate > 0
   const originalPrice = hasDiscount ? (Number.parseFloat(product.price) / (1 - discountRate)).toFixed(2) : null
 
-  return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        width: "100%",
-        height: "100%",
-        backgroundColor: "#000000",
-        color: "#ffffff",
-        fontFamily: "sans-serif",
-        position: "relative",
-      }}
-    >
-      {/* Product Image */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          width: "100%",
-          height: "60%",
-          overflow: "hidden",
-          position: "relative",
-        }}
-      >
-        <img
-          src={product.imageUrl || "/placeholder.svg"}
-          alt={product.productName}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
-          }}
-        />
-        {hasDiscount && (
-          <div
-            style={{
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              backgroundColor: "#ff4d4f",
-              color: "white",
-              padding: "8px 16px",
-              borderRadius: "20px",
-              fontWeight: "bold",
-              fontSize: "24px",
-            }}
-          >
-            {`-${Math.round(discountRate * 100)}%`}
-          </div>
-        )}
+  // Não use JSX aqui, pois está causando problemas de sintaxe
+  // Em vez disso, retorne uma string HTML simples
+  return `
+    <div style="display:flex;flex-direction:column;width:100%;height:100%;background-color:#000000;color:#ffffff;font-family:sans-serif;position:relative;">
+      <div style="display:flex;justify-content:center;align-items:center;width:100%;height:60%;overflow:hidden;position:relative;">
+        <img src="${product.imageUrl || "/placeholder.svg"}" alt="${product.productName}" style="width:100%;height:100%;object-fit:contain;" />
+        ${hasDiscount ? `<div style="position:absolute;top:20px;right:20px;background-color:#ff4d4f;color:white;padding:8px 16px;border-radius:20px;font-weight:bold;font-size:24px;">-${Math.round(discountRate * 100)}%</div>` : ""}
       </div>
-
-      {/* Product Info */}
-      <div
-        style={{
-          padding: "32px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "16px",
-          flex: 1,
-        }}
-      >
-        {/* Product Name */}
-        <h1
-          style={{
-            fontSize: "32px",
-            fontWeight: "bold",
-            margin: 0,
-            lineHeight: 1.2,
-          }}
-        >
-          {product.productName}
-        </h1>
-
-        {/* Price */}
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <span
-            style={{
-              fontSize: "40px",
-              fontWeight: "bold",
-              color: "#ff4d4f",
-            }}
-          >
-            R$ {product.price}
-          </span>
-          {hasDiscount && (
-            <span
-              style={{
-                fontSize: "24px",
-                textDecoration: "line-through",
-                color: "#999999",
-              }}
-            >
-              R$ {originalPrice}
-            </span>
-          )}
+      <div style="padding:32px;display:flex;flex-direction:column;gap:16px;flex:1;">
+        <h1 style="font-size:32px;font-weight:bold;margin:0;line-height:1.2;">${product.productName}</h1>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:40px;font-weight:bold;color:#ff4d4f;">R$ ${product.price}</span>
+          ${hasDiscount ? `<span style="font-size:24px;text-decoration:line-through;color:#999999;">R$ ${originalPrice}</span>` : ""}
         </div>
-
-        {/* Shop Name */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontSize: "20px",
-          }}
-        >
-          <span>Loja: {product.shopName}</span>
+        <div style="display:flex;align-items:center;gap:8px;font-size:20px;">
+          <span>Loja: ${product.shopName}</span>
         </div>
-
-        {/* Rating */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontSize: "20px",
-          }}
-        >
-          <span>⭐ {product.ratingStar}</span>
+        <div style="display:flex;align-items:center;gap:8px;font-size:20px;">
+          <span>⭐ ${product.ratingStar}</span>
           <span>•</span>
-          <span>Vendas: {product.sales}</span>
+          <span>Vendas: ${product.sales}</span>
         </div>
-
-        {/* Footer */}
-        <div
-          style={{
-            marginTop: "auto",
-            backgroundColor: "#ff4d4f",
-            padding: "16px",
-            borderRadius: "8px",
-            textAlign: "center",
-            fontSize: "24px",
-            fontWeight: "bold",
-          }}
-        >
+        <div style="margin-top:auto;background-color:#ff4d4f;padding:16px;border-radius:8px;text-align:center;font-size:24px;font-weight:bold;">
           COMPRE AGORA • LINK NA BIO
         </div>
       </div>
     </div>
-  )
+  `
 }
 
 async function fetchProductFromShopee(itemId: string) {
