@@ -6,6 +6,8 @@ import { createFallbackDescription } from "@/lib/template-renderer"
 
 const logger = createLogger("render-card-api")
 
+export const runtime = "edge"
+
 // Shopee API credentials from environment variables
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET

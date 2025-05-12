@@ -1,252 +1,146 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { ImageResponse } from "@vercel/og"
-import { logger } from "@/lib/logger"
+import { createLogger } from "@/lib/logger"
+
+const logger = createLogger("modern-card-test-api")
 
 export const runtime = "edge"
 
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams
-    const template = (searchParams.get("template") as "modern" | "minimal") || "modern"
-    const colorScheme = (searchParams.get("colorScheme") as "dark" | "light" | "gradient") || "dark"
-    const accentColor = searchParams.get("accentColor") || "#FF4D4D"
-    const showBadges = searchParams.get("showBadges") !== "false"
-    const descriptionStyle = (searchParams.get("descriptionStyle") as "clean" | "highlighted") || "clean"
-    const roundedCorners = searchParams.get("roundedCorners") !== "false"
+    const { searchParams } = new URL(request.url)
 
-    // Get product data from query params
-    const productId = searchParams.get("productId") || "123456"
-    const productName = searchParams.get("productName") || "Produto de exemplo"
-    const productPrice = Number.parseFloat(searchParams.get("productPrice") || "0")
+    // Extract product data from query parameters
+    const productName = searchParams.get("productName") || "Product Name"
+    const productPrice = Number.parseFloat(searchParams.get("productPrice") || "99.99")
     const productOriginalPrice = searchParams.get("productOriginalPrice")
       ? Number.parseFloat(searchParams.get("productOriginalPrice") || "0")
-      : undefined
+      : null
     const productDiscount = searchParams.get("productDiscount")
       ? Number.parseInt(searchParams.get("productDiscount") || "0")
-      : undefined
-    const productImageUrl = searchParams.get("productImageUrl") || ""
-    const productDescription = searchParams.get("productDescription") || ""
+      : null
+    const productImageUrl = searchParams.get("productImageUrl") || "https://via.placeholder.com/500"
+    const productDescription = searchParams.get("productDescription") || "Product description goes here."
     const productRating = searchParams.get("productRating")
       ? Number.parseFloat(searchParams.get("productRating") || "0")
-      : undefined
+      : 4.5
     const productSales = searchParams.get("productSales")
       ? Number.parseInt(searchParams.get("productSales") || "0")
-      : undefined
-    const productFreeShipping = searchParams.get("productFreeShipping") === "true"
+      : 1000
 
-    // If no product data is provided, use sample data
-    if (!productName || productPrice === 0 || !productImageUrl) {
-      // Sample product data
-      const product = {
-        id: "123456",
-        name: "Boca Rosa Base Líquida Matte Perfect By Payot",
-        price: 22.6,
-        originalPrice: 70.63,
-        discount: 68,
-        imageUrl:
-          "https://hebbkx1anhila5yf.public.blob.vercel-storage.com/tiktok_Boca_Rosa_Base_L_quida_Matte_P_2025-05-11T09-07-10-055Z_1-WgA93RhK2LibYRIv30IjpynOtC8WeB.png",
-        description:
-          "💄 Boca Rosa por SÓ R$22! 😱 Matte perfeita, pele de milhões! ✨ 68% OFF + 9mil vendidas! 💝 Corre pra S&M Sambashop e garante a sua! #shopee #oferta #desconto",
-        rating: 4.8,
-        sales: 9225,
-        freeShipping: true,
-      }
-    }
+    // Extract style options from query parameters
+    const template = searchParams.get("template") || "modern"
+    const colorScheme = searchParams.get("colorScheme") || "dark"
+    const accentColor = searchParams.get("accentColor") || "#FF4D4D"
+    const showBadges = searchParams.get("showBadges") !== "false"
+    const descriptionStyle = searchParams.get("descriptionStyle") || "clean"
+    const roundedCorners = searchParams.get("roundedCorners") !== "false"
 
-    // Format price
-    const formatPrice = (price: number): string => {
-      return `R$ ${price.toFixed(2).replace(".", ",")}`
-    }
-
-    // Background color based on color scheme
-    let backgroundColor = "#1a1a2e"
-    if (colorScheme === "light") {
-      backgroundColor = "#f8f9fa"
-    } else if (colorScheme === "gradient") {
-      backgroundColor = "#f8f9fa" // Simplified for ImageResponse
-    }
-
-    // Text color based on color scheme
-    const textColor = colorScheme === "dark" ? "#ffffff" : "#1a1a2e"
-    const secondaryTextColor = colorScheme === "dark" ? "#9ca3af" : "#6b7280"
-
-    // Generate the card using @vercel/og
-    return new ImageResponse(
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          width: "800px",
-          height: "1200px",
-          backgroundColor,
-          padding: "40px",
-          fontFamily: "sans-serif",
-        }}
-      >
-        {/* Product Image */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            width: "100%",
-            height: "500px",
-            backgroundColor: "#ffffff",
-            borderRadius: roundedCorners ? "20px" : "0px",
-            marginBottom: "40px",
-            overflow: "hidden",
-          }}
-        >
-          <img
-            src={productImageUrl || "/placeholder.svg"}
-            alt={productName}
-            style={{
-              maxWidth: "100%",
-              maxHeight: "100%",
-              objectFit: "contain",
-            }}
-          />
-        </div>
-
-        {/* Badges */}
-        {showBadges && (
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "20px" }}>
-            {productDiscount && productDiscount > 0 && (
-              <div
-                style={{
-                  backgroundColor: accentColor,
-                  color: "#ffffff",
-                  padding: "8px 16px",
-                  borderRadius: roundedCorners ? "20px" : "0px",
-                  fontWeight: "bold",
-                  fontSize: "24px",
-                }}
-              >
-                -{productDiscount}%
-              </div>
-            )}
-            {productFreeShipping && (
-              <div
-                style={{
-                  backgroundColor: "#10B981",
-                  color: "#ffffff",
-                  padding: "8px 16px",
-                  borderRadius: roundedCorners ? "20px" : "0px",
-                  fontWeight: "bold",
-                  fontSize: "24px",
-                }}
-              >
-                FRETE GRÁTIS
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Product Name */}
-        <div
-          style={{
-            color: textColor,
-            fontSize: "36px",
-            fontWeight: "bold",
-            marginBottom: "20px",
-          }}
-        >
-          {productName}
-        </div>
-
-        {/* Price Section */}
-        <div style={{ marginBottom: "30px" }}>
-          {productOriginalPrice && productOriginalPrice > productPrice && (
-            <div
-              style={{
-                color: secondaryTextColor,
-                fontSize: "28px",
-                textDecoration: "line-through",
-                marginBottom: "10px",
-              }}
-            >
-              {formatPrice(productOriginalPrice)}
-            </div>
-          )}
-          <div
-            style={{
-              color: accentColor,
-              fontSize: "48px",
-              fontWeight: "bold",
-            }}
-          >
-            {formatPrice(productPrice)}
-          </div>
-        </div>
-
-        {/* Rating and Sales */}
-        {productRating && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              marginBottom: "30px",
-            }}
-          >
-            <div style={{ color: "#FFD700", fontSize: "28px", marginRight: "10px" }}>★</div>
-            <div style={{ color: textColor, fontSize: "28px", marginRight: "10px" }}>{productRating.toFixed(1)}</div>
-            {productSales && (
-              <div style={{ color: secondaryTextColor, fontSize: "28px" }}>
-                • {productSales.toLocaleString()} vendas
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Description */}
-        {productDescription && (
-          <div
-            style={{
-              backgroundColor:
-                descriptionStyle === "highlighted"
-                  ? colorScheme === "dark"
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)"
-                  : "transparent",
-              padding: "20px",
-              borderRadius: roundedCorners ? "20px" : "0px",
-              marginBottom: "40px",
-            }}
-          >
-            <div
-              style={{
-                color: colorScheme === "dark" ? "#e5e7eb" : "#374151",
-                fontSize: "24px",
-              }}
-            >
-              {productDescription}
-            </div>
-          </div>
-        )}
-
-        {/* CTA Button */}
-        <div
-          style={{
-            backgroundColor: accentColor,
-            color: "#ffffff",
-            padding: "20px",
-            borderRadius: roundedCorners ? "35px" : "0px",
-            textAlign: "center",
-            fontWeight: "bold",
-            fontSize: "28px",
-            marginTop: "auto",
-          }}
-        >
-          COMPRE AGORA • LINK NA BIO
-        </div>
-      </div>,
+    // Generate HTML for the card
+    const cardHtml = generateCardHtml(
       {
-        width: 800,
-        height: 1200,
+        name: productName,
+        price: productPrice,
+        originalPrice: productOriginalPrice,
+        discount: productDiscount,
+        imageUrl: productImageUrl,
+        description: productDescription,
+        rating: productRating,
+        sales: productSales,
+      },
+      {
+        template,
+        colorScheme,
+        accentColor,
+        showBadges,
+        descriptionStyle,
+        roundedCorners,
       },
     )
-  } catch (error) {
+
+    // Generate image response
+    const imageResponse = new ImageResponse(cardHtml, {
+      width: 800,
+      height: 1200,
+      headers: {
+        "Cache-Control": "public, max-age=3600",
+      },
+    })
+
+    return imageResponse
+  } catch (error: any) {
     logger.error("Error generating modern card:", error)
-    return NextResponse.json({ error: "Failed to generate card" }, { status: 500 })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
+}
+
+// Function to generate card HTML
+function generateCardHtml(product: any, style: any) {
+  const { name, price, originalPrice, discount, imageUrl, description, rating, sales } = product
+
+  const { template, colorScheme, accentColor, showBadges, descriptionStyle, roundedCorners } = style
+
+  const hasDiscount = originalPrice && originalPrice > price
+
+  // Use string template instead of JSX to avoid syntax errors
+  return `
+    <div style="display:flex;flex-direction:column;width:100%;height:100%;background-color:${colorScheme === "dark" ? "#1a1a2e" : "#f8f9fa"};color:${colorScheme === "dark" ? "#ffffff" : "#1a1a2e"};font-family:sans-serif;position:relative;">
+      <div style="display:flex;justify-content:center;align-items:center;width:100%;height:50%;overflow:hidden;position:relative;background-color:#ffffff;${roundedCorners ? "border-radius:20px;" : ""}margin:40px 40px 0 40px;width:calc(100% - 80px);">
+        <img src="${imageUrl}" alt="${name}" style="width:100%;height:100%;object-fit:contain;" />
+        ${hasDiscount && showBadges ? `<div style="position:absolute;top:20px;right:20px;background-color:${accentColor};color:white;padding:8px 16px;border-radius:20px;font-weight:bold;font-size:18px;">-${Math.round(((originalPrice - price) / originalPrice) * 100)}%</div>` : ""}
+      </div>
+      <div style="padding:20px 40px;display:flex;flex-direction:column;gap:16px;flex:1;">
+        <h1 style="font-size:24px;font-weight:bold;margin:0;line-height:1.2;">${name}</h1>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span style="font-size:32px;font-weight:bold;color:${accentColor};">R$ ${price.toFixed(2).replace(".", ",")}</span>
+          ${hasDiscount ? `<span style="font-size:18px;text-decoration:line-through;color:${colorScheme === "dark" ? "#9ca3af" : "#6b7280"};">R$ ${originalPrice.toFixed(2).replace(".", ",")}</span>` : ""}
+        </div>
+        ${
+          rating
+            ? `
+        <div style="display:flex;align-items:center;gap:8px;font-size:16px;">
+          <span style="color:#FFD700;">★</span>
+          <span>${rating.toFixed(1)}</span>
+          ${sales ? `<span>•</span><span>${sales.toLocaleString()} vendas</span>` : ""}
+        </div>
+        `
+            : ""
+        }
+        ${
+          description
+            ? `
+        <div style="margin:10px 0;font-size:16px;line-height:1.5;color:${colorScheme === "dark" ? "#e5e7eb" : "#374151"};${descriptionStyle === "highlighted" ? `background-color:${colorScheme === "dark" ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.05)"};padding:15px;${roundedCorners ? "border-radius:10px;" : ""}` : ""}">
+          ${description}
+        </div>
+        `
+            : ""
+        }
+        <div style="margin-top:auto;background-color:${accentColor};padding:16px;${roundedCorners ? "border-radius:35px;" : ""}text-align:center;font-size:18px;font-weight:bold;color:white;">
+          COMPRE AGORA • LINK NA BIO
+        </div>
+      </div>
+    </div>
+  `
+}
+
+// Interface for product data
+interface Product {
+  name: string
+  price: number
+  originalPrice?: number | null
+  discount?: number | null
+  imageUrl: string
+  description?: string
+  rating?: number
+  sales?: number
+}
+
+// Interface for style options
+interface StyleOptions {
+  template: string
+  colorScheme: string
+  accentColor: string
+  showBadges: boolean
+  descriptionStyle: string
+  roundedCorners: boolean
 }
