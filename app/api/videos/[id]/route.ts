@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server"
 import fs from "fs"
 import path from "path"
-import storageService from "@/lib/storage-service"
-import { createLogger } from "@/lib/logger"
-
-const logger = createLogger("API:Videos:ID")
+import { redis } from "@/lib/redis"
+import { CACHE_KEYS } from "@/lib/constants"
 
 // Check if we're in a Vercel environment
 const isVercel = process.env.VERCEL === "1"
@@ -38,7 +36,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       },
     })
   } catch (error) {
-    logger.error("Error serving video:", error)
+    console.error("Error serving video:", error)
     return NextResponse.json({ success: false, message: "Failed to serve video" }, { status: 500 })
   }
 }
@@ -47,15 +45,28 @@ export async function DELETE(request: Request, { params }: { params: { id: strin
   try {
     const videoId = params.id
 
-    // Excluir o vídeo do armazenamento
-    await storageService.deleteVideo(videoId)
+    // Buscar o vídeo para obter a URL do Blob antes de excluir
+    const video = await redis.get(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
+    let videoData
+
+    if (video) {
+      try {
+        videoData = typeof video === "string" ? JSON.parse(video) : video
+      } catch (error) {
+        console.error(`Erro ao analisar dados do vídeo ${videoId}:`, error)
+      }
+    }
+
+    // Remover do Redis
+    await redis.srem(CACHE_KEYS.VIDEOS, videoId)
+    await redis.del(`${CACHE_KEYS.VIDEO_PREFIX}${videoId}`)
 
     return NextResponse.json({
       success: true,
       message: "Vídeo excluído com sucesso",
     })
   } catch (error) {
-    logger.error("Erro ao excluir vídeo:", error)
+    console.error("Erro ao excluir vídeo:", error)
     return NextResponse.json(
       {
         success: false,

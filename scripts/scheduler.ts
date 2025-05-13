@@ -1,11 +1,12 @@
-import { promisify } from "util"
+import fs from "fs"
+import path from "path"
 import { exec } from "child_process"
+import { promisify } from "util"
+import fetch from "node-fetch"
 import { createLogger } from "../lib/logger"
 import { renderProductCardTemplate } from "../lib/template-renderer"
 import { createFallbackDescription } from "../lib/template-renderer"
 import { html2image } from "../lib/html-to-image"
-import { getRedisClient, CACHE_KEYS } from "../lib/redis"
-import { uploadToBlob } from "../lib/blob-storage"
 
 const execAsync = promisify(exec)
 const logger = createLogger("Scheduler")
@@ -16,7 +17,7 @@ interface Schedule {
   time: string
   frequency: string
   status: string
-  type?: string
+  type?: string // New field to distinguish between regular and auto-download schedules
   lastRun?: string
   productCount?: number
   generatedCards?: string[]
@@ -32,47 +33,35 @@ interface ProductData {
   ratingStar?: string
 }
 
-/**
- * Fetch products from API or cache
- */
 async function fetchProducts(): Promise<ProductData[]> {
   try {
-    logger.info("Fetching products...")
+    logger.info("Fetching products from API...")
 
     // First try to fetch from Shopee API
-    try {
-      const shopeeResponse = await fetch("http://localhost:3000/api/fetch-shopee", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: "trending", limit: 5 }),
-      })
+    const shopeeResponse = await fetch("http://localhost:3000/api/fetch-shopee", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keyword: "trending", limit: 5 }),
+    })
 
-      if (shopeeResponse.ok) {
-        const shopeeData = await shopeeResponse.json()
-        if (shopeeData.success && shopeeData.products && shopeeData.products.length > 0) {
-          logger.info(`Successfully fetched ${shopeeData.products.length} products from Shopee API`)
-          return shopeeData.products
-        }
+    if (shopeeResponse.ok) {
+      const shopeeData = await shopeeResponse.json()
+      if (shopeeData.success && shopeeData.products && shopeeData.products.length > 0) {
+        logger.info(`Successfully fetched ${shopeeData.products.length} products from Shopee API`)
+        return shopeeData.products
       }
-    } catch (error) {
-      logger.warn("Failed to fetch from Shopee API, falling back to cache", error)
     }
 
     // Fallback to cached products
     logger.info("Falling back to cached products...")
-    try {
-      const redis = getRedisClient()
-      const cachedProducts = await redis.get(CACHE_KEYS.PRODUCTS)
+    const cachedResponse = await fetch("http://localhost:3000/api/products")
 
-      if (cachedProducts) {
-        const products = typeof cachedProducts === "string" ? JSON.parse(cachedProducts) : cachedProducts
-        if (Array.isArray(products) && products.length > 0) {
-          logger.info(`Successfully fetched ${products.length} products from cache`)
-          return products
-        }
+    if (cachedResponse.ok) {
+      const cachedData = await cachedResponse.json()
+      if (cachedData.success && cachedData.products && cachedData.products.length > 0) {
+        logger.info(`Successfully fetched ${cachedData.products.length} products from cache`)
+        return cachedData.products
       }
-    } catch (redisError) {
-      logger.error("Error accessing Redis cache:", redisError)
     }
 
     // If all else fails, return empty array
@@ -84,9 +73,7 @@ async function fetchProducts(): Promise<ProductData[]> {
   }
 }
 
-/**
- * Generate a product card and upload to Blob Storage
- */
+// Modificar a função generateProductCard para usar Blob Storage
 async function generateProductCard(
   product: ProductData,
   templateType = "portrait",
@@ -96,12 +83,22 @@ async function generateProductCard(
       `Generating card for product: ${product.itemId} - ${product.productName} with template: ${templateType}`,
     )
 
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
+
+    // Create temp directory if it doesn't exist (for local development)
+    const tempDir = path.join(process.cwd(), "tmp")
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+
     // Generate a unique filename
-    const timestamp = Date.now()
+    const timestamp = new Date().getTime()
     const filename = `product-${product.itemId}-${templateType}-${timestamp}.png`
+    const outputPath = path.join(tempDir, filename)
 
     // Generate description
-    const description = await getCachedOrGenerateDescription(product)
+    const description = createFallbackDescription(product)
 
     // Render HTML template
     const htmlTemplate = renderProductCardTemplate(product, description, templateType)
@@ -118,50 +115,36 @@ async function generateProductCard(
       format: "png",
     })
 
-    // Upload to Blob Storage
-    const blobUrl = await uploadToBlob(imageBuffer, filename)
+    // Em produção, salvar no Blob Storage
+    if (isVercel) {
+      try {
+        // Import dinamicamente para evitar erros em ambiente de desenvolvimento
+        const { put } = await import("@vercel/blob")
+        const blob = await put(filename, imageBuffer, {
+          access: "public",
+        })
 
-    if (blobUrl) {
-      logger.info(`Card uploaded to Blob Storage: ${blobUrl}`)
-      return { success: true, blobUrl, filePath: filename }
+        logger.info(`Card uploaded to Blob Storage: ${blob.url}`)
+        return { success: true, blobUrl: blob.url, filePath: filename }
+      } catch (blobError) {
+        logger.error("Error uploading to Blob Storage:", blobError)
+        // Fallback para sistema de arquivos local
+        fs.writeFileSync(outputPath, imageBuffer)
+        return { success: true, filePath: outputPath }
+      }
     } else {
-      throw new Error("Failed to upload to Blob Storage")
+      // Em desenvolvimento, salvar localmente
+      fs.writeFileSync(outputPath, imageBuffer)
+      logger.info(`Card generated successfully: ${outputPath}`)
+      return { success: true, filePath: outputPath }
     }
-  } catch (error: any) {
+  } catch (error) {
     logger.error(`Error generating card for product ${product.itemId}:`, error)
     return { success: false, error: error.message || "Unknown error" }
   }
 }
 
-/**
- * Get cached description or generate a new one
- */
-async function getCachedOrGenerateDescription(product: ProductData): Promise<string> {
-  try {
-    const redis = getRedisClient()
-    const cachedDescription = await redis.get(`${CACHE_KEYS.DESCRIPTION_PREFIX}${product.itemId}`)
-
-    if (cachedDescription) {
-      logger.info(`Using cached description for product ${product.itemId}`)
-      return String(cachedDescription)
-    }
-
-    // Generate fallback description
-    const description = createFallbackDescription(product)
-
-    // Cache the description for future use
-    await redis.set(`${CACHE_KEYS.DESCRIPTION_PREFIX}${product.itemId}`, description, { ex: 60 * 60 * 24 * 7 }) // 7 days
-
-    return description
-  } catch (error) {
-    logger.error(`Error getting/generating description for product ${product.itemId}:`, error)
-    return createFallbackDescription(product)
-  }
-}
-
-/**
- * Process an auto-download schedule
- */
+// Function to handle auto-download schedules
 async function processAutoDownloadSchedule(schedule: Schedule): Promise<void> {
   try {
     logger.info(`Processing auto-download schedule: ${schedule.id}`)
@@ -184,19 +167,23 @@ async function processAutoDownloadSchedule(schedule: Schedule): Promise<void> {
     const modernResult = await generateProductCard(product, "portrait")
     const ageminiResult = await generateProductCard(product, "ageminipara")
 
-    // Initialize arrays if they don't exist
-    schedule.generatedCards = schedule.generatedCards || []
-    schedule.errors = schedule.errors || []
-
     // Track results
-    if (modernResult.success && modernResult.blobUrl) {
-      schedule.generatedCards.push(modernResult.blobUrl)
+    if (modernResult.success) {
+      if (modernResult.blobUrl) {
+        schedule.generatedCards.push(modernResult.blobUrl)
+      } else if (modernResult.filePath) {
+        schedule.generatedCards.push(modernResult.filePath)
+      }
     } else if (modernResult.error) {
       schedule.errors.push(`Error generating modern card: ${modernResult.error}`)
     }
 
-    if (ageminiResult.success && ageminiResult.blobUrl) {
-      schedule.generatedCards.push(ageminiResult.blobUrl)
+    if (ageminiResult.success) {
+      if (ageminiResult.blobUrl) {
+        schedule.generatedCards.push(ageminiResult.blobUrl)
+      } else if (ageminiResult.filePath) {
+        schedule.generatedCards.push(ageminiResult.filePath)
+      }
     } else if (ageminiResult.error) {
       schedule.errors.push(`Error generating agemini card: ${ageminiResult.error}`)
     }
@@ -204,36 +191,46 @@ async function processAutoDownloadSchedule(schedule: Schedule): Promise<void> {
     logger.info(
       `Auto-download schedule ${schedule.id} processed with ${schedule.generatedCards.length} cards generated`,
     )
-  } catch (error: any) {
+  } catch (error) {
     logger.error(`Error processing auto-download schedule ${schedule.id}:`, error)
-    schedule.errors = schedule.errors || []
     schedule.errors.push(`Auto-download error: ${error.message || "Unknown error"}`)
   }
 }
 
-/**
- * Main function
- */
+// Modificar a função main para usar Redis em produção
 async function main() {
   try {
     logger.info("Starting scheduler...")
 
+    // Verificar se estamos no Vercel
+    const isVercel = process.env.VERCEL === "1"
     let schedules: Schedule[] = []
 
-    try {
-      // Get schedules from Redis
-      const redis = getRedisClient()
-      const schedulesData = await redis.get(CACHE_KEYS.SCHEDULES)
-
-      if (schedulesData) {
-        schedules = typeof schedulesData === "string" ? JSON.parse(schedulesData) : schedulesData
+    // Obter agendamentos
+    if (isVercel) {
+      try {
+        // Em produção, usar Redis
+        const { Redis } = await import("@upstash/redis")
+        const redis = Redis.fromEnv()
+        const schedulesData = await redis.get("schedules")
+        schedules = schedulesData ? JSON.parse(schedulesData) : []
         logger.info(`Found ${schedules.length} schedules in Redis`)
-      } else {
-        logger.info("No schedules found in Redis")
+      } catch (redisError) {
+        logger.error("Error accessing Redis:", redisError)
+        return
       }
-    } catch (error) {
-      logger.error("Error accessing Redis:", error)
-      return
+    } else {
+      // Em desenvolvimento, usar sistema de arquivos
+      const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+
+      if (!fs.existsSync(schedulesPath)) {
+        logger.info("No schedules found")
+        return
+      }
+
+      const rawData = fs.readFileSync(schedulesPath, "utf-8")
+      const data = JSON.parse(rawData)
+      schedules = data.schedules || []
     }
 
     if (schedules.length === 0) {
@@ -243,6 +240,8 @@ async function main() {
 
     // Get current date and time
     const now = new Date()
+    const currentDate = now.toISOString().split("T")[0]
+    const currentTime = now.toTimeString().split(" ")[0].substring(0, 5)
 
     // Check for schedules that need to be executed
     const schedulesToExecute = schedules.filter((schedule: Schedule) => {
@@ -295,9 +294,14 @@ async function main() {
           for (const product of products) {
             const result = await generateProductCard(product)
 
-            if (result.success && result.blobUrl) {
-              schedule.generatedCards.push(result.blobUrl)
-              logger.info(`Added card URL to schedule results: ${result.blobUrl}`)
+            if (result.success) {
+              if (result.blobUrl) {
+                schedule.generatedCards.push(result.blobUrl)
+                logger.info(`Added card URL to schedule results: ${result.blobUrl}`)
+              } else if (result.filePath) {
+                schedule.generatedCards.push(result.filePath)
+                logger.info(`Added card path to schedule results: ${result.filePath}`)
+              }
             } else if (result.error) {
               schedule.errors.push(`Error generating card for product ${product.itemId}: ${result.error}`)
               logger.error(`Failed to generate card for product ${product.itemId}: ${result.error}`)
@@ -312,7 +316,7 @@ async function main() {
             schedule.errors.push("Failed to generate any cards")
           }
         }
-      } catch (error: any) {
+      } catch (error) {
         logger.error(`Error executing schedule ${schedule.id}:`, error)
         schedule.errors.push(`Execution error: ${error.message || "Unknown error"}`)
       }
@@ -334,13 +338,22 @@ async function main() {
       }
     }
 
-    // Update schedules in Redis
-    try {
-      const redis = getRedisClient()
-      await redis.set(CACHE_KEYS.SCHEDULES, JSON.stringify(schedules))
-      logger.info("Updated schedules in Redis")
-    } catch (error) {
-      logger.error("Error updating Redis:", error)
+    // Atualizar agendamentos
+    if (isVercel) {
+      try {
+        // Em produção, atualizar no Redis
+        const { Redis } = await import("@upstash/redis")
+        const redis = Redis.fromEnv()
+        await redis.set("schedules", JSON.stringify(schedules))
+        logger.info("Updated schedules in Redis")
+      } catch (redisError) {
+        logger.error("Error updating Redis:", redisError)
+      }
+    } else {
+      // Em desenvolvimento, atualizar no sistema de arquivos
+      const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+      fs.writeFileSync(schedulesPath, JSON.stringify({ schedules }, null, 2))
+      logger.info("Updated schedules in file system")
     }
 
     logger.info("Scheduler execution completed successfully!")
@@ -349,5 +362,4 @@ async function main() {
   }
 }
 
-// Execute main function
 main()

@@ -5,8 +5,6 @@ import { usePathname } from "next/navigation"
 import { DesignerExport } from "@/components/designer-export"
 import { AutoSearch } from "@/components/auto-search"
 import { ScheduleAutomation } from "@/components/schedule-automation"
-import { IntegratedCardStudio } from "@/components/integrated-card-studio"
-import { SystemMonitorDashboard } from "@/components/system-monitor-dashboard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2 } from "lucide-react"
@@ -29,14 +27,8 @@ export function Dashboard() {
       setActiveTab("designer")
     } else if (pathname.includes("/automacao")) {
       setActiveTab("automation")
-    } else if (pathname.includes("/studio")) {
-      setActiveTab("studio")
-    } else if (pathname.includes("/templates")) {
-      setActiveTab("templates")
-    } else if (pathname.includes("/monitoring")) {
-      setActiveTab("monitoring")
-    } else if (pathname.includes("/documentation")) {
-      setActiveTab("documentation")
+    } else if (pathname.includes("/publicacao")) {
+      setActiveTab("publication")
     } else if (pathname.includes("/configuracoes")) {
       setActiveTab("settings")
     } else {
@@ -77,34 +69,19 @@ export function Dashboard() {
       case "search":
         return <AutoSearch />
       case "designer":
+        console.log("Dashboard renderizando com", products.length, "produtos")
         return <DesignerExport products={products.length > 0 ? products : []} />
       case "automation":
         return <ScheduleAutomation />
-      case "studio":
-        return <IntegratedCardStudio />
-      case "templates":
+      case "publication":
         return (
           <Card>
             <CardHeader>
-              <CardTitle>Templates</CardTitle>
-              <CardDescription>Gerencie e personalize templates para seus cards</CardDescription>
+              <CardTitle>Publicação</CardTitle>
+              <CardDescription>Gerencie a publicação de vídeos no TikTok</CardDescription>
             </CardHeader>
             <CardContent>
-              <p>Carregando gerenciador de templates...</p>
-            </CardContent>
-          </Card>
-        )
-      case "monitoring":
-        return <SystemMonitorDashboard />
-      case "documentation":
-        return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Documentação</CardTitle>
-              <CardDescription>Acesse a documentação completa do sistema</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p>Carregando documentação...</p>
+              <p>Conteúdo da aba de publicação</p>
             </CardContent>
           </Card>
         )
@@ -116,11 +93,12 @@ export function Dashboard() {
               <CardDescription>Configure as opções do sistema</CardDescription>
             </CardHeader>
             <CardContent>
-              <p>Carregando configurações...</p>
+              <p>Conteúdo da aba de configurações</p>
             </CardContent>
           </Card>
         )
       default:
+        console.log("Dashboard renderizando com", products.length, "produtos")
         return <DesignerExport products={products.length > 0 ? products : []} />
     }
   }

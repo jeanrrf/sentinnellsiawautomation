@@ -1,81 +1,141 @@
-import { NextResponse } from "next/server"
-import { v4 as uuidv4 } from "uuid"
-import storageService from "@/lib/storage-service"
+import { type NextRequest, NextResponse } from "next/server"
 import { createLogger } from "@/lib/logger"
+import { v4 as uuidv4 } from "uuid"
+import { getRedisClient } from "@/lib/redis"
+import { REDIS_KEYS } from "@/lib/redis-constants"
 
-const logger = createLogger("API:Schedule")
+const logger = createLogger("schedule-api")
 
-export async function GET() {
+// Obter agendamentos
+export async function GET(request: NextRequest) {
   try {
-    const schedules = await storageService.getSchedules()
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      return NextResponse.json({
+        success: false,
+        message: "Redis não está disponível",
+        schedules: [],
+      })
+    }
+
+    // Obter todos os agendamentos
+    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
 
     return NextResponse.json({
       success: true,
       schedules,
     })
   } catch (error: any) {
-    logger.error("Erro ao buscar agendamentos:", error)
+    logger.error("Erro ao obter agendamentos:", error)
+
     return NextResponse.json(
       {
         success: false,
-        message: `Falha ao buscar agendamentos: ${error.message}`,
+        message: error.message || "Erro ao obter agendamentos",
       },
       { status: 500 },
     )
   }
 }
 
-export async function POST(req: Request) {
+// Criar agendamento
+export async function POST(request: NextRequest) {
   try {
-    const data = await req.json()
+    const redis = await getRedisClient()
 
-    // Validar dados do agendamento
-    if (!data.date || !data.time || !data.frequency) {
+    if (!redis) {
       return NextResponse.json(
         {
           success: false,
-          message: "Dados de agendamento inválidos",
+          message: "Redis não está disponível",
+        },
+        { status: 503 },
+      )
+    }
+
+    // Obter dados do corpo da requisição
+    const {
+      date,
+      time,
+      frequency,
+      productCount = 5,
+      darkMode = false,
+      includeAllStyles = true,
+      textGenerationSettings = {},
+    } = await request.json()
+
+    // Validar dados
+    if (!date || !time || !frequency) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Dados incompletos. Data, hora e frequência são obrigatórios.",
         },
         { status: 400 },
       )
     }
 
-    // Criar ou atualizar agendamento
-    const schedule = {
-      id: data.id || uuidv4(),
-      date: data.date,
-      time: data.time,
-      frequency: data.frequency,
-      status: data.status || "pending",
-      type: data.type || "standard",
-      lastRun: data.lastRun,
-      productCount: data.productCount,
-      generatedCards: data.generatedCards || [],
-      errors: data.errors || [],
+    // Criar novo agendamento
+    const newSchedule = {
+      id: uuidv4(),
+      date,
+      time,
+      frequency,
+      productCount,
+      darkMode,
+      includeAllStyles,
+      textGenerationSettings,
+      status: "pending",
+      createdAt: new Date().toISOString(),
     }
 
-    await storageService.saveSchedule(schedule)
+    // Obter agendamentos existentes
+    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+
+    // Adicionar novo agendamento
+    schedules.push(newSchedule)
+
+    // Salvar agendamentos atualizados
+    await redis.set(REDIS_KEYS.schedules, JSON.stringify(schedules))
 
     return NextResponse.json({
       success: true,
-      schedule,
-      message: "Agendamento salvo com sucesso",
+      message: "Agendamento criado com sucesso",
+      schedule: newSchedule,
     })
   } catch (error: any) {
-    logger.error("Erro ao salvar agendamento:", error)
+    logger.error("Erro ao criar agendamento:", error)
+
     return NextResponse.json(
       {
         success: false,
-        message: `Falha ao salvar agendamento: ${error.message}`,
+        message: error.message || "Erro ao criar agendamento",
       },
       { status: 500 },
     )
   }
 }
 
-export async function DELETE(req: Request) {
+// Excluir agendamento
+export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url)
+    const redis = await getRedisClient()
+
+    if (!redis) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Redis não está disponível",
+        },
+        { status: 503 },
+      )
+    }
+
+    // Obter ID do agendamento a ser excluído
+    const { searchParams } = new URL(request.url)
     const id = searchParams.get("id")
 
     if (!id) {
@@ -88,7 +148,26 @@ export async function DELETE(req: Request) {
       )
     }
 
-    await storageService.deleteSchedule(id)
+    // Obter agendamentos existentes
+    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
+    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+
+    // Filtrar agendamentos para remover o agendamento com o ID fornecido
+    const updatedSchedules = schedules.filter((schedule: any) => schedule.id !== id)
+
+    // Verificar se algum agendamento foi removido
+    if (updatedSchedules.length === schedules.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Agendamento não encontrado",
+        },
+        { status: 404 },
+      )
+    }
+
+    // Salvar agendamentos atualizados
+    await redis.set(REDIS_KEYS.schedules, JSON.stringify(updatedSchedules))
 
     return NextResponse.json({
       success: true,
@@ -96,10 +175,11 @@ export async function DELETE(req: Request) {
     })
   } catch (error: any) {
     logger.error("Erro ao excluir agendamento:", error)
+
     return NextResponse.json(
       {
         success: false,
-        message: `Falha ao excluir agendamento: ${error.message}`,
+        message: error.message || "Erro ao excluir agendamento",
       },
       { status: 500 },
     )

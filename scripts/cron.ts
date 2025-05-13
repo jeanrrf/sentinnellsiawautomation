@@ -1,35 +1,36 @@
-import { promisify } from "util"
 import { exec } from "child_process"
+import { promisify } from "util"
 import { createLogger } from "../lib/logger"
 
 const execAsync = promisify(exec)
 const logger = createLogger("Cron")
 
-/**
- * Main function
- */
-async function main() {
+// Run the scheduler every 5 minutes
+const INTERVAL_MS = 5 * 60 * 1000
+
+async function runScheduler() {
   try {
-    logger.info("Starting cron job...")
+    logger.info("Running scheduler...")
+    const { stdout, stderr } = await execAsync("node scripts/scheduler.js")
 
-    // Chamar a API de cron para executar agendamentos
-    try {
-      const { stdout, stderr } = await execAsync("curl -X GET http://localhost:3000/api/cron")
-
-      if (stderr) {
-        logger.error("Error executing cron API:", stderr)
-      } else {
-        logger.info("Cron API response:", stdout)
-      }
-    } catch (error) {
-      logger.error("Failed to execute cron API:", error)
+    if (stdout) {
+      logger.info(`Scheduler output: ${stdout}`)
     }
 
-    logger.info("Cron job completed")
+    if (stderr) {
+      logger.warn(`Scheduler errors: ${stderr}`)
+    }
+
+    logger.info("Scheduler execution completed")
   } catch (error) {
-    logger.error("Error in cron execution:", error)
+    logger.error("Error running scheduler:", error)
   }
 }
 
-// Execute main function
-main()
+// Run immediately on startup
+runScheduler()
+
+// Then run on the defined interval
+setInterval(runScheduler, INTERVAL_MS)
+
+logger.info(`Cron job started. Will run scheduler every ${INTERVAL_MS / 1000 / 60} minutes`)

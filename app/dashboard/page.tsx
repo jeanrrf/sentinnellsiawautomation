@@ -8,7 +8,6 @@ export default function DashboardPage() {
     <div className="container mx-auto py-6">
       <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
 
-      {/* Primary Functions - Core functionality */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <Card>
           <CardHeader>
@@ -44,31 +43,10 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Studio Integrado</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Plataforma unificada para design, geração e automação de cards de produtos.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Link href="/dashboard/studio" className="w-full">
-              <Button className="w-full">Acessar Studio</Button>
-            </Link>
-          </CardFooter>
-        </Card>
-      </div>
-
-      {/* Secondary Functions - Supporting tools */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card>
-          <CardHeader>
             <CardTitle>Automação</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Configure agendamentos e geração automática de cards para seus produtos.
-            </p>
+            <p className="text-sm text-muted-foreground">Configure a automação para gerar cards automaticamente.</p>
           </CardContent>
           <CardFooter>
             <Link href="/dashboard/automacao" className="w-full">
@@ -76,52 +54,21 @@ export default function DashboardPage() {
             </Link>
           </CardFooter>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Templates</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Gerencie e personalize templates para seus cards de produtos.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Link href="/dashboard/templates" className="w-full">
-              <Button className="w-full">Gerenciar Templates</Button>
-            </Link>
-          </CardFooter>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Monitoramento</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Monitore o desempenho do sistema e uso de recursos como Redis e armazenamento.
-            </p>
-          </CardContent>
-          <CardFooter>
-            <Link href="/dashboard/monitoring" className="w-full">
-              <Button className="w-full">Monitorar Sistema</Button>
-            </Link>
-          </CardFooter>
-        </Card>
       </div>
 
-      {/* System Functions - Configuration and documentation */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <Card>
           <CardHeader>
-            <CardTitle>Documentação</CardTitle>
+            <CardTitle>Geração Rápida</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">Acesse a documentação completa do sistema e guias de uso.</p>
+            <p className="text-sm text-muted-foreground">
+              Gere cards com apenas um clique usando os produtos mais populares.
+            </p>
           </CardContent>
           <CardFooter>
-            <Link href="/dashboard/documentation" className="w-full">
-              <Button className="w-full">Ver Documentação</Button>
+            <Link href="/dashboard/one-click" className="w-full">
+              <Button className="w-full">Geração Rápida</Button>
             </Link>
           </CardFooter>
         </Card>

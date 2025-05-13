@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server"
 import { createLogger, ErrorCodes } from "@/lib/logger"
-import { createHash } from "crypto-browserify"
-import storageService from "@/lib/storage-service"
+import crypto from "crypto"
 
 const logger = createLogger("api-products")
 
@@ -13,25 +12,12 @@ const SHOPEE_AFFILIATE_API_URL = process.env.SHOPEE_AFFILIATE_API_URL
 // Função para gerar a assinatura para autenticação com a API da Shopee
 function generateSignature(appId: string, timestamp: number, payload: string, secret: string) {
   const baseString = `${appId}${timestamp}${payload}${secret}`
-  return createHash("sha256").update(baseString).digest("hex")
+  return crypto.createHash("sha256").update(baseString).digest("hex")
 }
 
 export async function GET(request: Request) {
   try {
     logger.info("Recebida solicitação para buscar produtos")
-
-    // Verificar se temos produtos armazenados temporariamente
-    const cachedProducts = await storageService.getProducts()
-    if (cachedProducts && cachedProducts.length > 0) {
-      logger.info(`Retornando ${cachedProducts.length} produtos do armazenamento temporário`)
-      return NextResponse.json({
-        success: true,
-        products: cachedProducts,
-        total: cachedProducts.length,
-        source: "temporary-storage",
-        timestamp: new Date().toISOString(),
-      })
-    }
 
     if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET || !SHOPEE_AFFILIATE_API_URL) {
       const errorMessage = "Credenciais da API Shopee não configuradas"
@@ -151,9 +137,6 @@ export async function GET(request: Request) {
         calculatedOriginalPrice: originalPrice,
       }
     })
-
-    // Salvar produtos no armazenamento temporário
-    await storageService.saveProducts(processedProducts)
 
     return NextResponse.json({
       success: true,
