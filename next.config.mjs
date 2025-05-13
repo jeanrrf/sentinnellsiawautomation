@@ -30,6 +30,24 @@ const nextConfig = {
     
     return config;
   },
+  // Adicionar configurações de segurança
+  headers: async () => {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff',
+          },
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=3600',
+          },
+        ],
+      },
+    ];
+  },
 }
 
 export default nextConfig
