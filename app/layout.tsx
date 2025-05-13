@@ -1,22 +1,31 @@
 import type React from "react"
-import "@/app/globals.css"
+import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
-import { fontSans } from "@/app/fonts"
-import { cn } from "@/lib/utils"
 import { ToastProvider } from "@/components/ui/use-toast"
+import "./globals.css"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata = {
-  title: "Shopee TikTok Generator",
-  description: "Gerador automatizado de vídeos para TikTok a partir de produtos da Shopee",
+  title: "Sales Martins - Shopee Affiliate TikTok Generator",
+  description: "Automated system for generating TikTok videos from Shopee top-selling products",
     generator: 'v0.dev'
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
-    <html lang="pt-BR" suppressHydrationWarning>
-      <head />
-      <body className={cn("min-h-screen bg-background font-sans antialiased", fontSans.variable)}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Bruno+Ace+SC&display=swap" rel="stylesheet" />
+      </head>
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <ToastProvider>{children}</ToastProvider>
         </ThemeProvider>
       </body>

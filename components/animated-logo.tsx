@@ -1,29 +1,41 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
+import { useEffect, useRef } from "react"
 
 export function AnimatedLogo() {
-  const [isAnimating, setIsAnimating] = useState(false)
+  const logoRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIsAnimating(true)
-      setTimeout(() => setIsAnimating(false), 2000)
-    }, 10000)
-
-    return () => clearInterval(interval)
+    if (logoRef.current) {
+      logoRef.current.innerHTML = `
+        <style>
+          @keyframes salesmartins-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          .salesmartins-logo-animated {
+            font-family: 'Bruno Ace SC', sans-serif;
+            font-size: 4rem;
+            font-weight: 700;
+            background: linear-gradient(-45deg, #ff007a, #b155ff, #01b4ff, #ff007a);
+            background-size: 300% 300%;
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            -webkit-text-fill-color: transparent;
+            animation: salesmartins-gradient 5s ease infinite;
+            text-align: center;
+            filter: drop-shadow(0 2px 12px #b155ff88);
+            border-radius: 18px;
+            padding: 0 12px;
+            display: inline-block;
+          }
+        </style>
+        <span class="salesmartins-logo-animated">Sales Martins</span>
+      `
+    }
   }, [])
 
-  return (
-    <Link href="/" className="flex items-center space-x-2">
-      <span
-        className={`text-2xl font-bold transition-all duration-500 ${
-          isAnimating ? "bg-gradient-to-r from-pink-500 via-purple-500 to-blue-500 bg-clip-text text-transparent" : ""
-        }`}
-      >
-        TikTok Generator
-      </span>
-    </Link>
-  )
+  return <div ref={logoRef} className="flex justify-center"></div>
 }

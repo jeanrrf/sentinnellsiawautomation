@@ -1,187 +1,110 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { createLogger } from "@/lib/logger"
-import { v4 as uuidv4 } from "uuid"
-import { getRedisClient } from "@/lib/redis"
-import { REDIS_KEYS } from "@/lib/redis-constants"
+import { NextResponse } from "next/server"
+import fs from "fs"
+import path from "path"
 
-const logger = createLogger("schedule-api")
+interface Schedule {
+  id: string
+  date: string
+  time: string
+  frequency: string
+  status: string
+}
 
-// Obter agendamentos
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const redis = await getRedisClient()
+    const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
 
-    if (!redis) {
-      return NextResponse.json({
-        success: false,
-        message: "Redis não está disponível",
-        schedules: [],
-      })
+    if (!fs.existsSync(schedulesPath)) {
+      const dir = path.dirname(schedulesPath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+
+      fs.writeFileSync(schedulesPath, JSON.stringify({ schedules: [] }, null, 2))
+      return NextResponse.json({ schedules: [] })
     }
 
-    // Obter todos os agendamentos
-    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
-    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+    const rawData = fs.readFileSync(schedulesPath, "utf-8")
+    const data = JSON.parse(rawData)
 
-    return NextResponse.json({
-      success: true,
-      schedules,
-    })
-  } catch (error: any) {
-    logger.error("Erro ao obter agendamentos:", error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message || "Erro ao obter agendamentos",
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ schedules: data.schedules || [] })
+  } catch (error) {
+    console.error("Error fetching schedules:", error)
+    return NextResponse.json({ success: false, message: "Failed to fetch schedules" }, { status: 500 })
   }
 }
 
-// Criar agendamento
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const redis = await getRedisClient()
+    const { date, time, frequency } = await req.json()
 
-    if (!redis) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Redis não está disponível",
-        },
-        { status: 503 },
-      )
-    }
-
-    // Obter dados do corpo da requisição
-    const {
-      date,
-      time,
-      frequency,
-      productCount = 5,
-      darkMode = false,
-      includeAllStyles = true,
-      textGenerationSettings = {},
-    } = await request.json()
-
-    // Validar dados
     if (!date || !time || !frequency) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Dados incompletos. Data, hora e frequência são obrigatórios.",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, message: "Date, time, and frequency are required" }, { status: 400 })
     }
 
-    // Criar novo agendamento
-    const newSchedule = {
-      id: uuidv4(),
+    const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
+
+    let schedules: Schedule[] = []
+    if (fs.existsSync(schedulesPath)) {
+      const rawData = fs.readFileSync(schedulesPath, "utf-8")
+      const data = JSON.parse(rawData)
+      schedules = data.schedules || []
+    } else {
+      const dir = path.dirname(schedulesPath)
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true })
+      }
+    }
+
+    const newSchedule: Schedule = {
+      id: Date.now().toString(),
       date,
       time,
       frequency,
-      productCount,
-      darkMode,
-      includeAllStyles,
-      textGenerationSettings,
       status: "pending",
-      createdAt: new Date().toISOString(),
     }
 
-    // Obter agendamentos existentes
-    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
-    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
-
-    // Adicionar novo agendamento
     schedules.push(newSchedule)
 
-    // Salvar agendamentos atualizados
-    await redis.set(REDIS_KEYS.schedules, JSON.stringify(schedules))
+    fs.writeFileSync(schedulesPath, JSON.stringify({ schedules }, null, 2))
 
     return NextResponse.json({
       success: true,
-      message: "Agendamento criado com sucesso",
       schedule: newSchedule,
     })
-  } catch (error: any) {
-    logger.error("Erro ao criar agendamento:", error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message || "Erro ao criar agendamento",
-      },
-      { status: 500 },
-    )
+  } catch (error) {
+    console.error("Error creating schedule:", error)
+    return NextResponse.json({ success: false, message: "Failed to create schedule" }, { status: 500 })
   }
 }
 
-// Excluir agendamento
-export async function DELETE(request: NextRequest) {
+export async function DELETE(req: Request) {
   try {
-    const redis = await getRedisClient()
-
-    if (!redis) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Redis não está disponível",
-        },
-        { status: 503 },
-      )
-    }
-
-    // Obter ID do agendamento a ser excluído
-    const { searchParams } = new URL(request.url)
-    const id = searchParams.get("id")
+    const { id } = await req.json()
 
     if (!id) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "ID do agendamento não fornecido",
-        },
-        { status: 400 },
-      )
+      return NextResponse.json({ success: false, message: "Schedule ID is required" }, { status: 400 })
     }
 
-    // Obter agendamentos existentes
-    const schedulesJson = await redis.get(REDIS_KEYS.schedules)
-    const schedules = schedulesJson ? JSON.parse(schedulesJson) : []
+    const schedulesPath = path.join(process.cwd(), "database", "schedules.json")
 
-    // Filtrar agendamentos para remover o agendamento com o ID fornecido
-    const updatedSchedules = schedules.filter((schedule: any) => schedule.id !== id)
-
-    // Verificar se algum agendamento foi removido
-    if (updatedSchedules.length === schedules.length) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Agendamento não encontrado",
-        },
-        { status: 404 },
-      )
+    if (!fs.existsSync(schedulesPath)) {
+      return NextResponse.json({ success: false, message: "No schedules found" }, { status: 404 })
     }
 
-    // Salvar agendamentos atualizados
-    await redis.set(REDIS_KEYS.schedules, JSON.stringify(updatedSchedules))
+    const rawData = fs.readFileSync(schedulesPath, "utf-8")
+    const data = JSON.parse(rawData)
+    const schedules = data.schedules || []
+
+    const updatedSchedules = schedules.filter((schedule: Schedule) => schedule.id !== id)
+
+    fs.writeFileSync(schedulesPath, JSON.stringify({ schedules: updatedSchedules }, null, 2))
 
     return NextResponse.json({
       success: true,
-      message: "Agendamento excluído com sucesso",
     })
-  } catch (error: any) {
-    logger.error("Erro ao excluir agendamento:", error)
-
-    return NextResponse.json(
-      {
-        success: false,
-        message: error.message || "Erro ao excluir agendamento",
-      },
-      { status: 500 },
-    )
+  } catch (error) {
+    console.error("Error deleting schedule:", error)
+    return NextResponse.json({ success: false, message: "Failed to delete schedule" }, { status: 500 })
   }
 }
