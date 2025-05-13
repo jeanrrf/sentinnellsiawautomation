@@ -154,25 +154,23 @@ function log(
   }
 }
 
-/**
- * Logger interface with methods for each log level
- */
+// Na interface Logger, adicionar warn como alias para warning
 export interface Logger {
   debug: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void
   info: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void
   warning: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void
+  warn: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void // Alias para warning
   error: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void
   critical: (message: string, options?: { code?: string; details?: any; context?: Record<string, any> }) => void
 }
 
-/**
- * Create a logger for a specific module
- */
+// Na função createLogger, adicionar warn como alias para warning
 export function createLogger(module: string): Logger {
   return {
     debug: (message, options) => log(LogLevel.DEBUG, message, module, options),
     info: (message, options) => log(LogLevel.INFO, message, module, options),
     warning: (message, options) => log(LogLevel.WARNING, message, module, options),
+    warn: (message, options) => log(LogLevel.WARNING, message, module, options), // Alias para warning
     error: (message, options) => log(LogLevel.ERROR, message, module, options),
     critical: (message, options) => log(LogLevel.CRITICAL, message, module, options),
   }

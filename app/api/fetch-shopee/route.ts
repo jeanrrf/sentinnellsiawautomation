@@ -85,7 +85,7 @@ async function fetchShopeeProducts(params: any) {
     const signature = generateSignature(SHOPEE_APP_ID, timestamp, payload, SHOPEE_APP_SECRET)
 
     const headers = {
-      Authorization: `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
+      Authorization: `SHA256 Credential=${SHOPEE_APP_ID},Timestamp=${timestamp},Signature=${signature}`,
       "Content-Type": "application/json",
     }
 

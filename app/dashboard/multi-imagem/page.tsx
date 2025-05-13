@@ -9,6 +9,7 @@ import { type TransitionConfig, DEFAULT_TRANSITION_CONFIG } from "@/lib/multi-im
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { createLogger } from "@/lib/logger"
 import { Loader2, Download, Share2 } from "lucide-react"
+import { useToast } from "@/components/ui/use-toast"
 
 const logger = createLogger("animated-cards-page")
 
@@ -18,13 +19,16 @@ export default function AnimatedCardsPage() {
   const [transitionConfig, setTransitionConfig] = useState<Partial<TransitionConfig>>(DEFAULT_TRANSITION_CONFIG)
   const [frameUrls, setFrameUrls] = useState<string[]>([])
   const [downloadLoading, setDownloadLoading] = useState(false)
+  const { toast } = useToast()
 
   // Buscar produto de exemplo
   useEffect(() => {
     const fetchSampleProduct = async () => {
       try {
         setLoading(true)
-        const response = await fetch("/api/sample-data")
+
+        // Primeiro, vamos buscar um produto da API de best-sellers
+        const response = await fetch("/api/best-sellers")
 
         if (!response.ok) {
           throw new Error(`Erro ao buscar dados: ${response.status}`)
@@ -33,39 +37,85 @@ export default function AnimatedCardsPage() {
         const data = await response.json()
 
         if (data.success && data.products && data.products.length > 0) {
-          // Adicionar URLs de imagem extras para testar a transição
-          const sampleProduct = data.products[0]
+          const bestSeller = data.products[0]
 
-          // Simular múltiplas imagens para o produto
-          sampleProduct.images = [
-            sampleProduct.imageUrl,
-            "/diverse-products-still-life.png",
-            "/diverse-people-listening-headphones.png",
-          ]
+          // Agora vamos buscar detalhes adicionais do produto, incluindo imagens
+          try {
+            // Tentar buscar detalhes adicionais do produto, incluindo imagens
+            const detailsResponse = await fetch(`/api/product-details?itemId=${bestSeller.itemId}`)
 
-          setProduct(sampleProduct)
+            if (detailsResponse.ok) {
+              const detailsData = await detailsResponse.json()
+
+              if (detailsData.success && detailsData.product) {
+                // Se tivermos detalhes adicionais, usá-los
+                const enhancedProduct = {
+                  ...bestSeller,
+                  ...detailsData.product,
+                  // Garantir que temos um array de imagens
+                  images: detailsData.product.images || [bestSeller.imageUrl],
+                }
+                setProduct(enhancedProduct)
+                logger.info(`Produto carregado com ${enhancedProduct.images?.length || 0} imagens`)
+              } else {
+                // Fallback para o produto original com imagens simuladas
+                fallbackToSimulatedImages(bestSeller)
+              }
+            } else {
+              // Fallback para o produto original com imagens simuladas
+              fallbackToSimulatedImages(bestSeller)
+            }
+          } catch (detailsError) {
+            logger.warning("Erro ao buscar detalhes do produto, usando fallback", { details: detailsError })
+            // Fallback para o produto original com imagens simuladas
+            fallbackToSimulatedImages(bestSeller)
+          }
         } else {
           throw new Error(data.error || "Erro ao buscar produtos")
         }
       } catch (error) {
-        logger.error("Erro ao buscar produto:", error)
+        logger.error("Erro ao buscar produto:", { details: error })
         // Criar um produto de exemplo como fallback
-        setProduct({
+        const fallbackProduct = {
           itemId: "123456",
           productName: "Produto de Exemplo",
           price: "149.90",
           sales: "1500",
           ratingStar: "4.8",
           imageUrl: "/generic-product-display.png",
-          images: ["/generic-product-display.png", "/placeholder.svg?key=zo22h", "/placeholder.svg?key=8r00q"],
+          images: [
+            "/generic-product-display.png",
+            "/diverse-products-still-life.png",
+            "/diverse-people-listening-headphones.png",
+          ],
+        }
+        setProduct(fallbackProduct)
+        toast({
+          title: "Usando produto de demonstração",
+          description: "Não foi possível carregar um produto real, usando dados de exemplo.",
+          variant: "warning",
         })
       } finally {
         setLoading(false)
       }
     }
 
+    // Função auxiliar para criar imagens simuladas quando não temos imagens reais
+    const fallbackToSimulatedImages = (product: any) => {
+      // Usar a imagem principal e adicionar algumas imagens de exemplo
+      const enhancedProduct = {
+        ...product,
+        images: [product.imageUrl, "/diverse-products-still-life.png", "/diverse-people-listening-headphones.png"],
+      }
+      setProduct(enhancedProduct)
+      logger.info("Usando imagens simuladas para o produto", {
+        productId: product.itemId,
+        imageCount: enhancedProduct.images.length,
+      })
+    }
+
     fetchSampleProduct()
-  }, [])
+  }, [toast])
 
   const handleFramesGenerated = (urls: string[]) => {
     setFrameUrls(urls)
@@ -104,9 +154,18 @@ export default function AnimatedCardsPage() {
       document.body.removeChild(a)
 
       URL.revokeObjectURL(url)
-    } catch (error) {
-      logger.error("Erro ao baixar GIF:", error)
-      alert("Erro ao baixar o GIF. Por favor, tente novamente.")
+
+      toast({
+        title: "Download concluído",
+        description: "O GIF animado foi baixado com sucesso.",
+      })
+    } catch (error: any) {
+      logger.error("Erro ao baixar GIF:", { details: error })
+      toast({
+        title: "Erro ao baixar GIF",
+        description: error.message || "Ocorreu um erro ao baixar o GIF animado.",
+        variant: "destructive",
+      })
     } finally {
       setDownloadLoading(false)
     }
@@ -117,7 +176,7 @@ export default function AnimatedCardsPage() {
       <div className="container py-10 flex items-center justify-center min-h-[50vh]">
         <div className="text-center">
           <Loader2 className="h-10 w-10 animate-spin mx-auto mb-4" />
-          <p>Carregando...</p>
+          <p>Carregando produto mais vendido...</p>
         </div>
       </div>
     )

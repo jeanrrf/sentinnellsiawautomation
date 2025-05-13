@@ -32,29 +32,52 @@ export function SystemStatusChecker() {
 
         const response = await fetch("/api/system-check")
 
+        // Verificar o tipo de conteúdo da resposta
+        const contentType = response.headers.get("content-type")
+
         if (!response.ok) {
-          throw new Error(`Failed to check system status: ${response.status} ${response.statusText}`)
+          throw new Error(`Falha ao verificar status do sistema: ${response.status} ${response.statusText}`)
+        }
+
+        if (!contentType || !contentType.includes("application/json")) {
+          throw new Error("Resposta inválida: API não retornou JSON")
         }
 
         const data = await response.json()
 
         setStatus({
           api: {
-            status: data.api.success,
-            message: data.api.message,
+            status: data.api?.success ?? false,
+            message: data.api?.message ?? "Sem informações disponíveis",
           },
           database: {
-            status: data.database.success,
-            message: data.database.message,
+            status: data.database?.success ?? false,
+            message: data.database?.message ?? "Sem informações disponíveis",
           },
           cache: {
-            status: data.cache.success,
-            message: data.cache.message,
+            status: data.cache?.success ?? false,
+            message: data.cache?.message ?? "Sem informações disponíveis",
           },
         })
       } catch (err: any) {
-        setError(err.message || "Failed to check system status")
-        console.error("Error checking system status:", err)
+        setError(err.message || "Falha ao verificar status do sistema")
+        console.error("Erro ao verificar status do sistema:", err)
+
+        // Definir status padrão em caso de erro
+        setStatus({
+          api: {
+            status: false,
+            message: "Não foi possível verificar o status",
+          },
+          database: {
+            status: false,
+            message: "Não foi possível verificar o status",
+          },
+          cache: {
+            status: false,
+            message: "Não foi possível verificar o status",
+          },
+        })
       } finally {
         setIsLoading(false)
       }
