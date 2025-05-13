@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -8,46 +7,32 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: ['cf.shopee.com.br', 'down-br.img.susercontent.com'],
+    domains: ['cf.shopee.com.br', 'down-lum-br.img.susercontent.com'],
     unoptimized: true,
   },
-  // Atualizado para Next.js 15.2.4
-  serverExternalPackages: ['puppeteer-core', 'chrome-aws-lambda', 'fluent-ffmpeg'],
+  experimental: {
+    serverComponentsExternalPackages: ['canvas', 'sharp'],
+  },
+  transpilePackages: ['@vercel/og'],
   webpack: (config) => {
-    // Configuração para lidar com módulos binários
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      'sharp$': false,
-      'canvas$': false,
-    };
+    // Configuração para suportar canvas no servidor
+    config.externals = [...(config.externals || []), 'canvas', 'jsdom'];
     
-    // Ignorar arquivos .map que estão causando erros
+    // Adiciona suporte para JSX em arquivos de API
     config.module.rules.push({
-      test: /\.map$/,
-      use: 'ignore-loader',
-      include: /node_modules\/chrome-aws-lambda/,
+      test: /\.(js|jsx|ts|tsx)$/,
+      use: [
+        {
+          loader: 'babel-loader',
+          options: {
+            presets: ['next/babel'],
+          },
+        },
+      ],
     });
     
     return config;
   },
-  // Adicionar configurações de segurança
-  headers: async () => {
-    return [
-      {
-        source: '/(.*)',
-        headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=3600',
-          },
-        ],
-      },
-    ];
-  },
 }
 
-export default nextConfig
+export default nextConfig;
