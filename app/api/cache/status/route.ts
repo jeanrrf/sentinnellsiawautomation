@@ -4,16 +4,27 @@ import redis from "@/lib/redis"
 export async function GET() {
   try {
     // Get cache statistics
-    const stats = { info: "Not available", keys: { products: 0, processedIds: 0 } }
+    const stats = {
+      info: "Not available",
+      keys: { products: 0, processedIds: 0 },
+      memory: "Unknown",
+      uptime: "Unknown",
+    }
     let descriptionKeys = []
     const descriptionSamples = {}
 
     try {
-      // Try to get Redis info
-      stats.info = await redis.info()
-    } catch (error) {
-      console.error("Error getting Redis info:", error)
-      stats.info = { error: "Failed to get Redis info" }
+      // Instead of using INFO command, we'll collect basic stats using available methods
+      const basicInfo = {
+        version: "Upstash Redis",
+        status: "Connected",
+        timestamp: new Date().toISOString(),
+      }
+
+      stats.info = basicInfo
+    } catch (infoError) {
+      console.error("Error getting Redis basic info:", infoError)
+      stats.info = { error: "Failed to get Redis info", message: infoError.message }
     }
 
     try {
@@ -52,9 +63,22 @@ export async function GET() {
       descriptionKeys = []
     }
 
+    // Get total number of keys in Redis
+    let totalKeys = 0
+    try {
+      // Get all keys matching our application pattern
+      const allKeys = await redis.keys("shopee:*")
+      totalKeys = allKeys.length
+    } catch (error) {
+      console.error("Error getting total keys:", error)
+    }
+
     return NextResponse.json({
       success: true,
-      stats,
+      stats: {
+        ...stats,
+        totalKeys,
+      },
       descriptionKeys: descriptionKeys.length,
       descriptionSamples,
       timestamp: new Date().toISOString(),

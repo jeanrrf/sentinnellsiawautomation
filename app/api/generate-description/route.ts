@@ -1,162 +1,119 @@
-import { NextResponse } from "next/server"
-import { getCachedDescription, cacheDescription } from "@/lib/redis"
+import { type NextRequest, NextResponse } from "next/server"
+import { createLogger } from "@/lib/logger"
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+const logger = createLogger("generate-description-api")
 
-export async function POST(req: Request) {
+// Função simplificada para gerar descrições
+function generateDescription(product: any): string {
+  // Extract product details
+  const productName = product.productName || "Produto"
+  const price = Number.parseFloat(product.price || "0").toFixed(2)
+  const discountRate = product.priceDiscountRate ? Number.parseInt(product.priceDiscountRate) : 0
+  const sales = Number.parseInt(product.sales || "0").toLocaleString("pt-BR")
+  const rating = Number.parseFloat(product.ratingStar || "0").toFixed(1)
+  const hasFreeShipping = product.freeShipping || false
+
+  // Gerar emojis relevantes com base no nome do produto
+  let categoryEmojis = "🛍️ 🔥"
+  let categoryHashtags = "#oferta #shopee"
+
+  if (/celular|smartphone|iphone|samsung|xiaomi/i.test(productName)) {
+    categoryEmojis = "📱 💯"
+    categoryHashtags = "#tech #smartphone #oferta"
+  } else if (/roupa|camiseta|blusa|vestido|calça/i.test(productName)) {
+    categoryEmojis = "👕 👗"
+    categoryHashtags = "#moda #estilo #oferta"
+  } else if (/sapato|tênis|sandália|calçado/i.test(productName)) {
+    categoryEmojis = "👟 👠"
+    categoryHashtags = "#calçados #moda #estilo"
+  } else if (/maquiagem|batom|perfume|beleza/i.test(productName)) {
+    categoryEmojis = "💄 ✨"
+    categoryHashtags = "#beleza #makeup #oferta"
+  } else if (/eletrônico|fone|headset|gadget|computador|notebook/i.test(productName)) {
+    categoryEmojis = "🔌 💻"
+    categoryHashtags = "#tech #gadget #oferta"
+  }
+
+  // Frases de chamada para ação
+  const callToActions = [
+    "CORRE QUE TÁ ACABANDO! 🏃‍♂️",
+    "NÃO PERCA ESSA CHANCE! ⏰",
+    "GARANTA O SEU AGORA! 👆",
+    "APROVEITE ENQUANTO DURA! ⚡",
+    "OFERTA POR TEMPO LIMITADO! ⏱️",
+    "CLICA NO LINK E GARANTE! 🔗",
+    "ÚLTIMAS UNIDADES! 🔥",
+  ]
+
+  // Escolher aleatoriamente uma chamada para ação
+  const randomCTA = callToActions[Math.floor(Math.random() * callToActions.length)]
+
+  // Generate a description based on product details
+  let description = `${categoryEmojis} SUPER OFERTA! ${categoryEmojis}
+
+${productName}
+
+`
+
+  if (discountRate > 0) {
+    description += `💰 Com ${discountRate}% OFF! De R$${(Number.parseFloat(price) / (1 - discountRate / 100)).toFixed(2)} por apenas R$${price}
+`
+  } else {
+    description += `💰 Apenas R$${price}
+`
+  }
+
+  if (hasFreeShipping) {
+    description += `✅ FRETE GRÁTIS para todo o Brasil!\n`
+  }
+
+  description += `\n${randomCTA}
+
+${categoryHashtags} #desconto #promocao`
+
+  return description
+}
+
+export async function POST(request: NextRequest) {
   try {
-    const { product } = await req.json()
+    const { product } = await request.json()
 
     if (!product) {
-      return NextResponse.json({ success: false, message: "Product data is required" }, { status: 400 })
-    }
-
-    // Check if description is already cached
-    const cachedDescription = await getCachedDescription(product.itemId)
-    if (cachedDescription) {
-      console.log(`Using cached description for product ${product.itemId}`)
-      return NextResponse.json({
-        success: true,
-        description: cachedDescription,
-        source: "cache",
-      })
-    }
-
-    if (!GEMINI_API_KEY) {
-      return NextResponse.json({ success: false, message: "Gemini API key is not configured" }, { status: 500 })
-    }
-
-    const prompt = `
-      You are an elite copywriter, specialized in viral digital marketing and persuasion, focused on creating desire and urgency for products on platforms like TikTok and Instagram Reels.
-      Your mission is to transform the information about this product into a short (maximum 200 characters), irresistible, highly creative copy that maximizes clicks and conversions. Think like a sales champion.
-
-      PRODUCT PROVIDED:
-      - Name: ${product.productName}
-      - Price: R$ ${product.price}
-      - Rating (Stars): ${product.ratingStar || "N/A"} ⭐
-      - Units Sold: ${product.sales}
-      - Shop Name: ${product.shopName}
-
-      CRITICAL GUIDELINES FOR A PERFECT COPY:
-      1. Immediate Impact (Headline): Start with an ultra-catchy phrase that instantly grabs attention.
-      2. Desire and Central Benefit: Describe the product in a vibrant way, focusing on the main benefit.
-      3. Integrated Social Proof: Mention popularity (sales, rating).
-      4. Irresistible Offer (Price): Present the price as a unique opportunity.
-      5. Magnetic Call to Action (CTA): Use a clear, direct CTA with a sense of urgency.
-      6. Strategic Emojis: Use 4-5 emojis that reinforce the message.
-      7. Relevant Hashtags: Include 3-4 short, popular, and niche-specific hashtags.
-      8. Tone of Voice: Young, authentic, energetic, confident, fun, and slightly informal.
-      9. Strict Limit: MAXIMUM of 200 characters.
-      10. Originality: Avoid worn-out clichés.
-
-      Respond ONLY with the product description, without any additional comments before or after.
-    `
-
-    // Direct API call to Gemini
-    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 200,
+      logger.warn("Missing product in request")
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Produto não fornecido",
+          message: "AVISO: Nenhum produto foi fornecido para gerar a descrição.",
         },
-      }),
-    })
-
-    if (!response.ok) {
-      const errorData = await response.text()
-      console.error("Gemini API error:", errorData)
-
-      // Create a fallback description if the API fails
-      const fallbackDescription = createFallbackDescription(product)
-
-      // Cache the fallback description
-      await cacheDescription(product.itemId, fallbackDescription)
-
-      return NextResponse.json({
-        success: true,
-        description: fallbackDescription,
-        note: "Used fallback description due to API error",
-        source: "fallback",
-      })
+        { status: 400 },
+      )
     }
 
-    const data = await response.json()
+    logger.info(`Generating description for product: ${product.itemId || "unknown"}`)
 
-    // Extract the generated text from the response
-    let generatedText = ""
-    if (data.candidates && data.candidates.length > 0) {
-      const content = data.candidates[0].content
-      if (content && content.parts && content.parts.length > 0) {
-        generatedText = content.parts[0].text
-      }
-    }
-
-    if (!generatedText) {
-      // If no text was generated, use fallback
-      const fallbackDescription = createFallbackDescription(product)
-
-      // Cache the fallback description
-      await cacheDescription(product.itemId, fallbackDescription)
-
-      return NextResponse.json({
-        success: true,
-        description: fallbackDescription,
-        note: "Used fallback description due to empty API response",
-        source: "fallback",
-      })
-    }
-
-    // Cache the generated description
-    await cacheDescription(product.itemId, generatedText.trim())
+    // Gerar descrição
+    const description = generateDescription(product)
 
     return NextResponse.json({
       success: true,
-      description: generatedText.trim(),
-      source: "api",
+      description,
+      source: "local",
+      timestamp: new Date().toISOString(),
     })
-  } catch (error) {
-    console.error("Error generating description:", error)
+  } catch (error: any) {
+    logger.error("Error generating description", {
+      details: error,
+    })
 
-    // If there's an error, create a fallback description
-    try {
-      const { product } = await req.json()
-      const fallbackDescription = createFallbackDescription(product)
-
-      // Cache the fallback description
-      await cacheDescription(product.itemId, fallbackDescription)
-
-      return NextResponse.json({
-        success: true,
-        description: fallbackDescription,
-        note: "Used fallback description due to error",
-        source: "fallback",
-      })
-    } catch (e) {
-      return NextResponse.json({ success: false, message: "Failed to generate description" }, { status: 500 })
-    }
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Erro ao gerar descrição",
+        details: error.message,
+        message: "AVISO: Ocorreu um erro ao gerar a descrição do produto.",
+      },
+      { status: 500 },
+    )
   }
-}
-
-// Fallback description generator
-function createFallbackDescription(product: any) {
-  const price = Number.parseFloat(product.price)
-  const stars = Number.parseFloat(product.ratingStar || "4.5")
-  const sales = Number.parseInt(product.sales)
-
-  const urgency = sales > 1000 ? "🔥 MEGA OFERTA!" : "⚡ OFERTA ESPECIAL!"
-  const rating = "⭐".repeat(Math.round(stars))
-  const popularity = sales > 5000 ? "PRODUTO VIRAL! 🚀" : sales > 1000 ? "SUPER POPULAR! 📈" : "QUERIDINHO! 💎"
-
-  return `${urgency} ${popularity}\n${rating}\n${product.productName.substring(0, 50)}${product.productName.length > 50 ? "..." : ""}\n💰 Apenas R$${price.toFixed(2)}\n🛍️ Já vendidos: ${sales}\n#oferta #shopee #desconto`
 }

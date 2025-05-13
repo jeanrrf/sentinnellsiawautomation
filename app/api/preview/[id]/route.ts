@@ -1,69 +1,136 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
+import { createLogger } from "@/lib/logger"
 import { renderProductCardTemplate } from "@/lib/template-renderer"
-import { getCachedDescription } from "@/lib/redis"
+import puppeteer from "puppeteer"
+import path from "path"
+import fs from "fs"
+import os from "os"
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+const logger = createLogger("preview-api")
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const productId = params.id
-    console.log(`Generating preview for product ID: ${productId}`)
+    const searchParams = request.nextUrl.searchParams
+    const style = searchParams.get("style") || "portrait"
 
-    // Fetch product data from the products API
-    const productsResponse = await fetch(new URL("/api/products", request.url).toString())
+    logger.info(`Generating preview for product: ${productId} with style: ${style}`)
 
-    if (!productsResponse.ok) {
-      console.error(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`)
-      return new NextResponse(`Failed to fetch products: ${productsResponse.status} ${productsResponse.statusText}`, {
-        status: productsResponse.status,
-        headers: {
-          "Content-Type": "text/plain",
-        },
-      })
+    // Fetch product data
+    const productResponse = await fetch(`${request.nextUrl.origin}/api/products`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+
+    if (!productResponse.ok) {
+      throw new Error(`Falha ao buscar produtos: ${productResponse.status} ${productResponse.statusText}`)
     }
 
-    const productsData = await productsResponse.json()
-    const product = productsData.products.find((p: any) => p.itemId === productId)
+    const productData = await productResponse.json()
+
+    if (!productData.success) {
+      throw new Error(productData.error || "Erro desconhecido ao buscar produtos")
+    }
+
+    const product = productData.products?.find((p) => p.itemId === productId)
 
     if (!product) {
-      console.error(`Product not found: ${productId}`)
-      return new NextResponse(`Product not found: ${productId}`, {
-        status: 404,
-        headers: {
-          "Content-Type": "text/plain",
-        },
-      })
+      throw new Error(`Produto com ID ${productId} não encontrado`)
     }
 
-    // Try to get cached description
-    let description
+    // Generate description
+    let description = ""
     try {
-      description = await getCachedDescription(productId)
-      console.log(`Description for product ${productId}:`, description ? "Found in cache" : "Not found in cache")
-    } catch (error) {
-      console.error(`Error getting cached description for product ${productId}:`, error)
+      const descResponse = await fetch(`${request.nextUrl.origin}/api/generate-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ product }),
+      })
+
+      if (descResponse.ok) {
+        const descData = await descResponse.json()
+        if (descData.success) {
+          description = descData.description
+        }
+      }
+    } catch (descError) {
+      logger.error("Error generating description:", descError)
+      // Fallback to basic description
+      description = `🔥 SUPER OFERTA! 🔥\n\n${product.productName}\n\n💰 Apenas R$${Number(product.price).toFixed(
+        2,
+      )}\n\n#oferta #shopee`
     }
 
-    // If no cached description, generate a simple one
-    if (!description) {
-      description = `🔥 MEGA OFERTA! ${product.productName}\n💰 Apenas R$${product.price}\n⭐ Avaliação: ${product.ratingStar || "N/A"}\n🛍️ ${product.sales} vendidos\n#oferta #shopee #desconto`
-      console.log(`Generated fallback description for product ${productId}`)
+    // Generate HTML
+    const html = renderProductCardTemplate(product, description, style)
+
+    // Determine dimensions based on style
+    let width = 1080
+    let height = 1920
+
+    if (style === "square") {
+      width = 1080
+      height = 1080
+    } else if (style === "landscape") {
+      width = 1920
+      height = 1080
     }
 
-    // Generate HTML template
-    const htmlTemplate = renderProductCardTemplate(product, description)
+    // Generate image from HTML
+    const imageBuffer = await generateImageFromHTML(html, width, height)
 
-    // Return the HTML directly
-    return new NextResponse(htmlTemplate, {
+    // Return the image
+    return new NextResponse(imageBuffer, {
       headers: {
-        "Content-Type": "text/html",
+        "Content-Type": "image/png",
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
       },
     })
+  } catch (error: any) {
+    logger.error("Error generating preview:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Erro ao gerar preview",
+        details: error.message,
+      },
+      { status: 500 },
+    )
+  }
+}
+
+async function generateImageFromHTML(html: string, width: number, height: number) {
+  const tempDir = process.env.TEMP_DIR || os.tmpdir()
+  const tempFilePath = path.join(tempDir, `preview-${Date.now()}.png`)
+
+  try {
+    // Launch browser
+    const browser = await puppeteer.launch({
+      headless: "new",
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      executablePath: process.env.CHROME_EXECUTABLE_PATH,
+    })
+
+    const page = await browser.newPage()
+    await page.setViewport({ width, height, deviceScaleFactor: 2 })
+    await page.setContent(html, { waitUntil: "networkidle0" })
+
+    // Take screenshot
+    const imageBuffer = await page.screenshot({ type: "png" })
+
+    await browser.close()
+
+    return imageBuffer
   } catch (error) {
-    console.error("Error generating preview:", error)
-    return new NextResponse(`Error generating preview: ${error.message}`, {
-      status: 500,
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    })
+    logger.error("Error generating image from HTML:", error)
+    throw new Error("Falha ao gerar imagem do preview")
+  } finally {
+    // Clean up temp file if it exists
+    if (fs.existsSync(tempFilePath)) {
+      fs.unlinkSync(tempFilePath)
+    }
   }
 }

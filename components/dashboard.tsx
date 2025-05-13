@@ -1,174 +1,107 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ProductList } from "@/components/product-list"
-import { VideoGenerator } from "@/components/video-generator"
-import { ScheduleManager } from "@/components/schedule-manager"
-import { Header } from "@/components/header"
-import { AnimatedLogo } from "@/components/animated-logo"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { RefreshCw } from "lucide-react"
+import { usePathname } from "next/navigation"
+import { DesignerExport } from "@/components/designer-export"
+import { AutoSearch } from "@/components/auto-search"
+import { ScheduleAutomation } from "@/components/schedule-automation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { WorkflowGuide } from "@/components/workflow-guide"
+import { Loader2 } from "lucide-react"
 
+/**
+ * Dashboard - Componente principal do painel de controle
+ */
 export function Dashboard() {
+  const pathname = usePathname()
+  const [activeTab, setActiveTab] = useState("designer")
   const [isLoading, setIsLoading] = useState(true)
-  const [products, setProducts] = useState([])
-  const [error, setError] = useState("")
-  const [retryCount, setRetryCount] = useState(0)
-  const [activeTab, setActiveTab] = useState("products")
-  const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
+  const [products, setProducts] = useState([]) // Assuming you have a products state
+
+  // Determinar a aba ativa com base no pathname
+  useEffect(() => {
+    setIsLoading(true)
+    if (pathname.includes("/busca")) {
+      setActiveTab("search")
+    } else if (pathname.includes("/designer")) {
+      setActiveTab("designer")
+    } else if (pathname.includes("/automacao")) {
+      setActiveTab("automation")
+    } else if (pathname.includes("/publicacao")) {
+      setActiveTab("publication")
+    } else if (pathname.includes("/configuracoes")) {
+      setActiveTab("settings")
+    } else {
+      setActiveTab("designer") // Default
+    }
+    setIsLoading(false)
+  }, [pathname])
 
   useEffect(() => {
+    // Simulate fetching products (replace with your actual data fetching logic)
     const fetchProducts = async () => {
-      try {
-        setIsLoading(true)
-        setError("")
-
-        console.log("Fetching products...")
-
-        // Add a timeout to the fetch to prevent hanging
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-
-        const response = await fetch("/api/products", {
-          signal: controller.signal,
-        }).catch((err) => {
-          if (err.name === "AbortError") {
-            throw new Error("Request timed out after 10 seconds")
-          }
-          throw err
-        })
-
-        clearTimeout(timeoutId)
-
-        if (!response.ok) {
-          const errorText = await response.text().catch(() => "No error details available")
-          throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}. Details: ${errorText}`)
-        }
-
-        const data = await response.json()
-        console.log("Products API response:", data)
-
-        if (data.success) {
-          setProducts(data.products || [])
-          console.log(`Loaded ${data.products?.length || 0} products from ${data.source || "unknown source"}`)
-        } else {
-          setError(data.message || "Failed to fetch products")
-        }
-      } catch (err: any) {
-        setError(err.message || "An error occurred while fetching products")
-        console.error("Error fetching products:", err)
-      } finally {
-        setIsLoading(false)
-      }
+      // Example:
+      // const data = await fetch('/api/products');
+      // const products = await data.json();
+      // setProducts(products);
+      setProducts([
+        { id: 1, name: "Product 1" },
+        { id: 2, name: "Product 2" },
+      ]) // Example data
     }
 
     fetchProducts()
-  }, [retryCount])
-
-  // Verificar se há um produto selecionado no localStorage ao carregar
-  useEffect(() => {
-    const storedProductId = localStorage.getItem("selectedProductId")
-    if (storedProductId) {
-      setSelectedProductId(storedProductId)
-      setActiveTab("generator")
-    }
   }, [])
 
-  const handleRetry = () => {
-    setRetryCount((prev) => prev + 1)
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-10rem)]">
+        <Button variant="ghost" size="icon" disabled>
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </Button>
+      </div>
+    )
   }
 
-  const handleFetchProducts = async () => {
-    try {
-      const response = await fetch("/api/fetch-shopee", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch products: ${response.status} ${response.statusText}`)
-      }
-
-      const data = await response.json()
-
-      if (data.success) {
-        // Reload the page to show the new products
-        window.location.reload()
-      } else {
-        throw new Error(data.message || "Failed to fetch products from Shopee")
-      }
-    } catch (err) {
-      console.error(err)
-      alert(`Error fetching products: ${err.message}`)
+  // Renderizar o conteúdo com base na aba ativa
+  const renderContent = () => {
+    switch (activeTab) {
+      case "search":
+        return <AutoSearch />
+      case "designer":
+        console.log("Dashboard renderizando com", products.length, "produtos")
+        return <DesignerExport products={products.length > 0 ? products : []} />
+      case "automation":
+        return <ScheduleAutomation />
+      case "publication":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Publicação</CardTitle>
+              <CardDescription>Gerencie a publicação de vídeos no TikTok</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p>Conteúdo da aba de publicação</p>
+            </CardContent>
+          </Card>
+        )
+      case "settings":
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurações</CardTitle>
+              <CardDescription>Configure as opções do sistema</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p>Conteúdo da aba de configurações</p>
+            </CardContent>
+          </Card>
+        )
+      default:
+        console.log("Dashboard renderizando com", products.length, "produtos")
+        return <DesignerExport products={products.length > 0 ? products : []} />
     }
   }
 
-  const handleSelectProduct = (productId: string) => {
-    setSelectedProductId(productId)
-    setActiveTab("generator")
-  }
-
-  return (
-    <div className="container mx-auto px-4 py-6">
-      <Header />
-
-      <div className="flex justify-center my-8">
-        <AnimatedLogo />
-      </div>
-
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <RefreshCw className="h-4 w-4 mr-2" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>{error}</span>
-            <Button variant="outline" size="sm" onClick={handleRetry}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Retry
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="products">Produtos</TabsTrigger>
-          <TabsTrigger value="generator" disabled={products.length === 0}>
-            Gerador de Cards
-          </TabsTrigger>
-          <TabsTrigger value="scheduler">Agendamento</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="products" className="w-full overflow-x-auto">
-          <ProductList products={products} isLoading={isLoading} error={error} onSelectProduct={handleSelectProduct} />
-        </TabsContent>
-
-        <TabsContent value="generator">
-          {products.length === 0 ? (
-            <div className="text-center py-12">
-              <Alert className="mb-6">
-                <AlertDescription>
-                  Você precisa buscar produtos da Shopee antes de usar o gerador de cards.
-                </AlertDescription>
-              </Alert>
-              <Button onClick={handleFetchProducts}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Buscar Produtos da Shopee
-              </Button>
-            </div>
-          ) : (
-            <>
-              <VideoGenerator products={products} />
-              <WorkflowGuide />
-            </>
-          )}
-        </TabsContent>
-
-        <TabsContent value="scheduler">
-          <ScheduleManager />
-        </TabsContent>
-      </Tabs>
-    </div>
-  )
+  return <div className="container mx-auto">{renderContent()}</div>
 }

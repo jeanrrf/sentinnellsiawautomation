@@ -1,9 +1,6 @@
-import { Dashboard } from "@/components/dashboard"
+import { redirect } from "next/navigation"
 
 export default function Home() {
-  return (
-    <main className="min-h-screen">
-      <Dashboard />
-    </main>
-  )
+  // Redirecionar para o dashboard
+  redirect("/dashboard")
 }
