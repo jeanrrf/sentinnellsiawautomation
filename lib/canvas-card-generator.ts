@@ -3,6 +3,8 @@
  * Design moderno e otimizado para conversão
  */
 
+import { createCanvas, loadImage } from "./dynamic-imports"
+
 // Tipos para configuração do card
 export interface CardConfig {
   width: number
@@ -129,9 +131,7 @@ export async function generateProductCard(
   return new Promise((resolve, reject) => {
     try {
       // Criar canvas com as dimensões especificadas
-      const canvas = document.createElement("canvas")
-      canvas.width = finalConfig.width
-      canvas.height = finalConfig.height
+      const canvas = createCanvas(finalConfig.width, finalConfig.height)
       const ctx = canvas.getContext("2d")
 
       if (!ctx) {
@@ -161,33 +161,27 @@ export async function generateProductCard(
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       // Carregar as imagens do produto
-      const mainImage = new Image()
-      mainImage.crossOrigin = "anonymous"
+      loadImage(product.imageUrl || "/placeholder.svg")
+        .then((mainImage) => {
+          // Renderizar o card com a imagem carregada
+          renderCardWithImage(ctx, mainImage, product, description, finalConfig, palette)
 
-      mainImage.onload = () => {
-        // Renderizar o card com a imagem carregada
-        renderCardWithImage(ctx, mainImage, product, description, finalConfig, palette)
-
-        // Converter canvas para blob
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(blob)
-            } else {
-              reject(new Error("Failed to convert canvas to blob"))
-            }
-          },
-          finalConfig.format === "png" ? "image/png" : "image/jpeg",
-          finalConfig.format === "png" ? undefined : finalConfig.quality,
-        )
-      }
-
-      mainImage.onerror = () => {
-        reject(new Error("Failed to load product image"))
-      }
-
-      // Iniciar carregamento da imagem
-      mainImage.src = product.imageUrl || "/placeholder.svg"
+          // Converter canvas para blob
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                resolve(blob)
+              } else {
+                reject(new Error("Failed to convert canvas to blob"))
+              }
+            },
+            finalConfig.format === "png" ? "image/png" : "image/jpeg",
+            finalConfig.format === "png" ? undefined : finalConfig.quality,
+          )
+        })
+        .catch(() => {
+          reject(new Error("Failed to load product image"))
+        })
     } catch (error) {
       reject(error)
     }
@@ -199,7 +193,7 @@ export async function generateProductCard(
  */
 function renderCardWithImage(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+  img: any,
   product: any,
   description: string,
   config: CardConfig,
@@ -285,7 +279,7 @@ function renderCardWithImage(
  */
 function renderProductImage(
   ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
+  img: any,
   x: number,
   y: number,
   width: number,

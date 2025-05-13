@@ -158,7 +158,7 @@ export default function DebugGeminiPage() {
         <TabsContent value="description-test">
           <Card>
             <CardHeader>
-              <CardTitle>Teste de Geração de Descrição</CardTitle>
+              <CardTitle>Teste de Geração de Descriç��o</CardTitle>
               <CardDescription>Testa a geração de descrição com um produto de exemplo</CardDescription>
             </CardHeader>
 

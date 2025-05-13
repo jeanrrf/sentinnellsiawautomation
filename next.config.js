@@ -1,7 +1,5 @@
-const withTM = require("next-transpile-modules")(["three"]);
-
 /** @type {import('next').NextConfig} */
-const nextConfig = withTM({
+const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   eslint: {
@@ -19,13 +17,13 @@ const nextConfig = withTM({
     if (!isServer) {
       config.resolve.fallback = {
         ...config.resolve.fallback,
-        crypto: require.resolve('crypto-browserify'),
-        stream: require.resolve('stream-browserify'),
-        buffer: require.resolve('buffer'),
-      };
+        crypto: require.resolve("crypto-browserify"),
+        stream: require.resolve("stream-browserify"),
+        buffer: require.resolve("buffer"),
+      }
     }
-    return config;
+    return config
   },
-});
+}
 
-module.exports = nextConfig;
+module.exports = nextConfig
