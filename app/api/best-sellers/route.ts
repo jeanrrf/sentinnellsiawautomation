@@ -58,7 +58,7 @@ export async function GET() {
     const signature = generateSignature(SHOPEE_APP_ID, timestamp, payload, SHOPEE_APP_SECRET)
 
     const headers = {
-      Authorization: `SHA256 Credential=${SHOPEE_APP_ID},Timestamp=${timestamp},Signature=${signature}`,
+      Authorization: `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
       "Content-Type": "application/json",
     }
 
@@ -88,7 +88,7 @@ export async function GET() {
     const products = data?.data?.productOfferV2?.nodes || []
 
     if (products.length === 0) {
-      logger.warning("No products returned from Shopee API")
+      logger.warn("No products returned from Shopee API")
       throw new Error("No products found")
     }
 
@@ -128,8 +128,7 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: error.message || "Error fetching products",
-        timestamp: new Date().toISOString(),
+        error: error.message || "Failed to fetch best seller products",
       },
       { status: 500 },
     )

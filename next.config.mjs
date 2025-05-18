@@ -12,7 +12,7 @@ const nextConfig = {
     unoptimized: true,
   },
   // Atualizado para Next.js 15.2.4
-  serverExternalPackages: ['puppeteer-core', 'chrome-aws-lambda', 'fluent-ffmpeg', 'canvas', 'sharp'],
+  serverExternalPackages: ['puppeteer-core', 'chrome-aws-lambda', 'fluent-ffmpeg'],
   webpack: (config) => {
     // Configuração para lidar com módulos binários
     config.resolve.alias = {

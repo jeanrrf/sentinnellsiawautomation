@@ -13,11 +13,5 @@ export async function GET() {
     status: "active",
   }
 
-  // Adicionando cabeçalhos de segurança e cache
-  return NextResponse.json(planInfo, {
-    headers: {
-      "Cache-Control": "public, max-age=3600",
-      "X-Content-Type-Options": "nosniff",
-    },
-  })
+  return NextResponse.json(planInfo)
 }
